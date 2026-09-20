@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { 
   X, Copy, Check, Share2, Send, MessageCircle, 
-  Facebook, Smartphone, QrCode, Sparkles, ExternalLink, Link2,
+  Smartphone, QrCode, Sparkles, ExternalLink, Link2,
   SmartphoneNfc
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -173,7 +173,7 @@ export const ShareProductModal: React.FC<ShareProductModalProps> = ({
                 className="flex flex-col items-center justify-center p-3 rounded-2xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 transition-all active:scale-95 group"
               >
                 <div className="w-9 h-9 rounded-full bg-[#1877F2] text-white flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
-                  <Facebook className="w-5 h-5 fill-white" />
+                  <MessageCircle className="w-5 h-5 fill-white" />
                 </div>
                 <span className="text-[11px] font-bold mt-1.5">ফেসবুক</span>
               </a>

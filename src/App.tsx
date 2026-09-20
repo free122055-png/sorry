@@ -73,6 +73,7 @@ const HelpCenter = safeLazy(() => import("./pages/HelpCenter"), "HelpCenter");
 const Contact = safeLazy(() => import("./pages/Contact"), "Contact");
 const AccountSettings = safeLazy(() => import("./pages/AccountSettings"), "AccountSettings");
 const DownloadCert = safeLazy(() => import("./pages/DownloadCert"));
+const PixelEditingTools = safeLazy(() => import("./pages/PixelEditingTools"), "PixelEditingTools");
 
 const LoadingFallback = () => (
   <div className="min-h-[40vh] flex flex-col items-center justify-center p-4">
@@ -150,15 +151,18 @@ function EmailPromptHandler() {
 function AppLayout() {
   const location = useLocation();
   const isTilawat = location.pathname === "/islamic-tilawat" || location.pathname === "/tilawat";
+  const isPixelEditor = location.pathname === "/pixel-editing-tools" || 
+                        location.pathname === "/pixel-tools" || 
+                        location.pathname === "/pixel";
 
   return (
     <div className={`w-full min-h-screen overflow-x-hidden overflow-y-auto ${
-      isTilawat ? "bg-[#030d17] pb-0" : "bg-[#f8f9fa] pb-24 md:pb-0"
+      isTilawat || isPixelEditor ? "bg-[#030d17] pb-0" : "bg-[#f8f9fa] pb-24 md:pb-0"
     }`}>
       <SplashScreen />
       <EmailPromptHandler />
-      <Header />
-      <main className={isTilawat ? "w-full" : "max-w-7xl mx-auto w-full"}>
+      {!isPixelEditor && <Header />}
+      <main className={isTilawat || isPixelEditor ? "w-full" : "max-w-7xl mx-auto w-full"}>
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -207,6 +211,10 @@ function AppLayout() {
             <Route path="/cert" element={<DownloadCert />} />
             <Route path="/download-cert" element={<DownloadCert />} />
             
+            <Route path="/pixel-editing-tools" element={<PixelEditingTools />} />
+            <Route path="/pixel-tools" element={<PixelEditingTools />} />
+            <Route path="/pixel" element={<PixelEditingTools />} />
+            
             <Route path="/security" element={<Legal />} />
             
             <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
@@ -222,8 +230,8 @@ function AppLayout() {
           </Routes>
         </Suspense>
       </main>
-      <BottomNav />
-      <FloatingOrderBubble />
+      {!isPixelEditor && <BottomNav />}
+      {!isPixelEditor && <FloatingOrderBubble />}
       <DeepLinkHandler />
       <AuthModal />
     </div>
@@ -246,4 +254,3 @@ export default function App() {
     </Router>
   );
 }
-

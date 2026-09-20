@@ -4,7 +4,7 @@ import {
   ArrowLeft, Menu, Save, Upload, X, Plus, Tag, CheckCircle2, 
   AlertCircle, Percent, Image as ImageIcon, PackagePlus, 
   Package, Truck, ClipboardList, LayoutDashboard, Settings,
-  LayoutGrid, Users, Download, KeyRound, Copy, Home as HomeIcon, Bell, Mail, Eye, Radio, Mic, Video
+  LayoutGrid, Users, Download, KeyRound, Copy, Home as HomeIcon, Bell, Mail, Eye, Radio, Mic, Video, Layout, Type
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../lib/firebase";
@@ -21,6 +21,8 @@ import { CategoryVisibilityManagement } from "../components/admin/CategoryVisibi
 import { MainBannerManagement } from "../components/admin/MainBannerManagement";
 import { ReciterManagement } from "../components/admin/ReciterManagement";
 import { VideoTilawatManagement } from "../components/admin/VideoTilawatManagement";
+import { TemplateManagement } from "../components/admin/TemplateManagement";
+import { FontManagement } from "../components/admin/FontManagement";
 import { IntegrationCenter } from "../components/admin/IntegrationCenter";
 import { UserManagement } from "../components/admin/UserManagement";
 import { OneSignalConfig } from "../components/admin/OneSignalConfig";
@@ -55,7 +57,7 @@ OVKwXvSuAXa961yvmxhloAvVNj3PHewurSsi+j//+6+EtA9G5LJmj+1BBhxglwOk
 export const Admin: React.FC = () => {
   // Navigation Menu State
   const [activeMenu, setActiveMenu] = useState<
-    "all-products" | "add-product" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management"
+    "all-products" | "add-product" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management"
   >("all-products");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedUserForNotification, setSelectedUserForNotification] = useState<any>(null);
@@ -378,6 +380,8 @@ export const Admin: React.FC = () => {
         <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 flex items-center gap-1.5 min-w-max">
           {[
             { id: "all-products", label: "সকল প্রোডাক্ট", icon: Package },
+            { id: "font-management", label: "🔤 ফন্ট ম্যানেজমেন্ট", icon: Type },
+            { id: "template-management", label: "টেমপ্লেট লাইব্রেরি", icon: Layout },
             { id: "video-tilawat-management", label: "ভিডিও তেলাওয়াত", icon: Video },
             { id: "reciter-management", label: "তেলাওয়াত কারী", icon: Mic },
             { id: "orders", label: "অর্ডারসমূহ", icon: ClipboardList },
@@ -463,6 +467,24 @@ export const Admin: React.FC = () => {
                   active={activeMenu === "all-products"}
                   onClick={() => {
                     setActiveMenu("all-products");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
+                  icon={<Type className="text-cyan-600" />}
+                  label="🔤 কাস্টম ফন্ট ম্যানেজমেন্ট"
+                  active={activeMenu === "font-management"}
+                  onClick={() => {
+                    setActiveMenu("font-management");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
+                  icon={<Layout className="text-indigo-600" />}
+                  label="টেমপ্লেট লাইব্রেরি ম্যানেজমেন্ট"
+                  active={activeMenu === "template-management"}
+                  onClick={() => {
+                    setActiveMenu("template-management");
                     setIsDrawerOpen(false);
                   }}
                 />
@@ -710,6 +732,14 @@ export const Admin: React.FC = () => {
         {/* VIEW 1: ALL PRODUCTS MANAGEMENT (VIEW, EDIT, DELETE) */}
         {activeMenu === "all-products" ? (
           <ProductManagement onNavigateToAddProduct={() => setActiveMenu("add-product")} />
+        ) : activeMenu === "font-management" ? (
+          <div className="w-full max-w-5xl px-2 sm:px-4 py-4">
+            <FontManagement />
+          </div>
+        ) : activeMenu === "template-management" ? (
+          <div className="w-full max-w-6xl px-2 sm:px-4 py-4">
+            <TemplateManagement />
+          </div>
         ) : activeMenu === "video-tilawat-management" ? (
           <div className="w-full max-w-6xl px-2 sm:px-4 py-4">
             <VideoTilawatManagement />

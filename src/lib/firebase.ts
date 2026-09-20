@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { initializeFirestore } from "firebase/firestore";
+import { initializeFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 import { getAuth, setPersistence, browserLocalPersistence, inMemoryPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 import firebaseConfig from "../../firebase-applet-config.json";
@@ -12,8 +12,17 @@ export const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: 
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Gracefully configure local persistence for auth in browser environments
+// Gracefully configure local persistence for auth and Firestore caching in browser environments
 if (typeof window !== "undefined") {
+  // Enable offline IndexedDB persistence for robust local database caching
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === "failed-precondition") {
+      console.warn("Firestore persistence precondition failed (multiple tabs open)");
+    } else if (err.code === "unimplemented") {
+      console.warn("Firestore persistence is unimplemented in this browser");
+    }
+  });
+
   setPersistence(auth, browserLocalPersistence).catch(() => {
     // If browser local storage / IndexedDB is restricted (e.g. iframe privacy sandbox),
     // fallback gracefully to in-memory persistence without logging uncaught errors.

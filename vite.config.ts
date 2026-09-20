@@ -5,18 +5,18 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    root: __dirname,
+    root: process.cwd(),
     plugins: [react(), tailwindcss()],
     build: {
       outDir: 'dist',
       emptyOutDir: true,
       rollupOptions: {
-        input: path.resolve(__dirname, 'index.html'),
+        input: path.resolve(process.cwd(), 'index.html'),
       },
     },
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(process.cwd(), '.'),
       },
       dedupe: ['react', 'react-dom'],
     },

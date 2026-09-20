@@ -4,6 +4,7 @@ import {
   onSnapshot, query, orderBy 
 } from "firebase/firestore";
 import { db } from "../../lib/firebase";
+import { getApiUrl } from "../../lib/api";
 import { 
   Video, Upload, Plus, Trash2, Edit3, Play, X, CheckCircle2, 
   AlertCircle, Film, Sparkles, Eye, Clock, User, BookOpen, 
@@ -365,7 +366,7 @@ export const VideoTilawatManagement: React.FC = () => {
     reader.onload = async () => {
       const base64 = reader.result as string;
       try {
-        const res = await fetch("/api/upload/image", {
+        const res = await fetch(getApiUrl("/api/upload/image"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: base64 }),
@@ -395,7 +396,7 @@ export const VideoTilawatManagement: React.FC = () => {
     reader.onload = async () => {
       const base64 = reader.result as string;
       try {
-        const res = await fetch("/api/upload/image", {
+        const res = await fetch(getApiUrl("/api/upload/image"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: base64 }),
@@ -529,7 +530,7 @@ export const VideoTilawatManagement: React.FC = () => {
           const base64Data = await readPromise;
           setUploadProgress(60);
 
-          const res = await fetch("/api/upload/video", {
+          const res = await fetch(getApiUrl("/api/upload/video"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

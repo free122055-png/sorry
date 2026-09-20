@@ -1,496 +1,209 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Link } from "react-router-dom";
+import React from "react";
+import { useNavigate } from "react-router-dom";
 import { 
-  ChevronRight, ShoppingBasket, Sparkles, Shirt, Gift, ShoppingBag, 
-  Moon, Headphones, BookOpen, Timer, Truck, Package, ShoppingBag as BagIcon,
-  CheckCircle2, Utensils
+  Plus, ShoppingBag, ChevronRight,
+  Sparkles, Gift, BookOpen, Music,
+  Shirt, Moon, Layers
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion } from "motion/react";
 import { SEO } from "../components/SEO";
 import { StorefrontFacade } from "../components/StorefrontFacade";
-import heroBannerImg from "../assets/images/mayadin_hero_banner_1788164624823.jpg";
 
-import { db } from "../lib/firebase";
-import { getApiUrl } from "../lib/api";
-import { collection, onSnapshot, query, orderBy, where, limit, doc, updateDoc } from "firebase/firestore";
-
-import { useAuth } from "../context/AuthContext";
-
-const ActiveOrderWidget: React.FC = React.memo(() => {
-  const { user } = useAuth();
-  const [activeOrder, setActiveOrder] = useState<any>(null);
-  const [timeLeft, setTimeLeft] = useState("");
-
-  const syncStatus = useCallback(async (orderData: any) => {
-    try {
-      const response = await fetch(getApiUrl(`/api/delivery/steadfast/track/${orderData.deliveryInfo?.trackingId}`));
-      if (!response.ok) return;
-      
-      const result = await response.json();
-      if (result.status === 200) {
-        const orderRef = doc(db, "food_orders", orderData.id);
-        
-        const mapSteadfastStatus = (steadfastStatus: string) => {
-          const s = steadfastStatus.toLowerCase();
-          if (s.includes('pending')) return 'pickup_pending';
-          if (s.includes('picked')) return 'picked_up';
-          if (s.includes('transit')) return 'in_transit';
-          if (s.includes('delivered')) return 'delivered';
-          if (s.includes('return')) return 'returned';
-          if (s.includes('cancel')) return 'cancelled';
-          if (s.includes('fail')) return 'failed';
-          return 'created';
-        };
-
-        const newStatus = mapSteadfastStatus(result.delivery_status);
-        if (newStatus !== orderData.deliveryInfo?.status) {
-          await updateDoc(orderRef, {
-            "deliveryInfo.status": newStatus,
-            "deliveryInfo.lastUpdated": Date.now(),
-            "internalStatus": newStatus === 'delivered' ? 'completed' : 
-                             (newStatus === 'cancelled' || newStatus === 'failed' || newStatus === 'returned' ? 'cancelled' : orderData.internalStatus),
-            "updatedAt": Date.now()
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Status Sync Error:", error);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!user) {
-      setActiveOrder(null);
-      return;
-    }
-
-    const q = query(
-      collection(db, "food_orders"),
-      where("userId", "==", user.uid),
-      where("internalStatus", "in", ["placed", "confirmed", "processing", "shipped"]),
-      orderBy("createdAt", "desc"),
-      limit(1)
-    );
-
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const data = snapshot.docs[0].data();
-          const orderData = { id: snapshot.docs[0].id, ...data } as any;
-          setActiveOrder(orderData);
-          
-          if (orderData.deliveryInfo?.trackingId && orderData.deliveryInfo.status !== 'delivered' && orderData.deliveryInfo.status !== 'cancelled') {
-            syncStatus(orderData);
-          }
-        } else {
-          setActiveOrder(null);
-        }
-      },
-      (error) => {
-        console.warn("ActiveOrderWidget listener error:", error);
-        setActiveOrder(null);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user, syncStatus]);
-
-  useEffect(() => {
-    if (!activeOrder) return;
-
-    const calculateTime = () => {
-      const now = Date.now();
-      const createdTime = activeOrder.createdAt?.seconds 
-        ? activeOrder.createdAt.seconds * 1000 
-        : (typeof activeOrder.createdAt === 'number' ? activeOrder.createdAt : now);
-      
-      const totalTime = 40 * 60 * 1000;
-      const elapsed = now - createdTime;
-      const remaining = totalTime - elapsed;
-
-      if (remaining <= 0) {
-        setTimeLeft("শীঘ্রই আসছে");
-      } else {
-        const mins = Math.floor(remaining / (1000 * 60));
-        const secs = Math.floor((remaining % (1000 * 60)) / 1000);
-        setTimeLeft(`${mins}:${secs < 10 ? '0' : ''}${secs}`);
-      }
-    };
-
-    const timer = setInterval(calculateTime, 1000);
-    calculateTime();
-    return () => clearInterval(timer);
-  }, [activeOrder]);
-
-  if (!activeOrder) return null;
-
-  const steps = [
-    { key: 'placed', icon: BagIcon },
-    { key: 'confirmed', icon: Utensils },
-    { key: 'processing', icon: Package },
-    { key: 'shipped', icon: Truck },
-    { key: 'completed', icon: CheckCircle2 }
-  ];
-
-  const currentIndex = steps.findIndex(s => s.key === activeOrder.internalStatus);
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, y: -20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="px-4 sm:px-6 mb-4"
-    >
-      <Link 
-        to={`/order/${activeOrder.id}`}
-        className="block bg-white rounded-[24px] p-4 border border-emerald-100 shadow-[0_8px_20px_rgba(16,185,129,0.08)] relative overflow-hidden group active:scale-[0.98] transition-all"
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-50/30 via-transparent to-emerald-50/30 animate-pulse"></div>
-        <div className="relative z-10">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center">
-                <Timer className="w-5 h-5 text-emerald-600 animate-pulse" />
-              </div>
-              <div>
-                <p className="text-[9px] font-black text-emerald-600/60 uppercase tracking-widest leading-none mb-1">আপনার অর্ডারটি আসছে</p>
-                <h4 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                  পৌঁছাতে বাকি: <span className="text-emerald-600 font-mono text-base">{timeLeft}</span>
-                </h4>
-              </div>
-            </div>
-            <div className="bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100/50">
-               <span className="text-[10px] font-black text-emerald-700">অর্ডার #{activeOrder.orderNumber}</span>
-            </div>
-          </div>
-          <div className="relative h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: `${(currentIndex / (steps.length - 1)) * 100}%` }}
-              className="absolute top-0 left-0 h-full bg-emerald-500"
-            ></motion.div>
-          </div>
-          <div className="flex justify-between mt-2">
-            {steps.map((step, idx) => {
-              const isActive = idx === currentIndex;
-              const isCompleted = idx < currentIndex;
-              const Icon = step.icon;
-              return (
-                <div key={step.key} className="flex flex-col items-center gap-1">
-                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${
-                    isActive ? 'bg-emerald-500 text-white shadow-md' : 
-                    isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-50 text-gray-300'
-                  }`}>
-                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'animate-bounce' : ''}`} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </Link>
-    </motion.div>
-  );
-});
-
-interface CategoryCard {
-  id: string;
-  title: string;
-  count: string;
-  image: string;
-  iconBg: string;
-  icon: React.ComponentType<{ className?: string }>;
-  link: string;
-}
-
-const bannerSlides = [
-  {
-    id: "slide1",
-    tagline: "বিশুদ্ধ পণ্যের নতুন ঠিকানা",
-    brandTitlePart1: "ALL MAYADIN",
-    brandTitlePart2: "BAZAR",
-    subtitle: "সেরা পণ্য • সেরা দাম • সেরা সেবা",
-    buttonText: "এখনই কেনাকাটা করুন",
-    image: heroBannerImg,
-    link: "/categories",
-  },
-  {
-    id: "slide2",
-    tagline: "প্রিমিয়াম রূপসজ্জা ও কেয়ার",
-    brandTitlePart1: "BEAUTY &",
-    brandTitlePart2: "GROOMING",
-    subtitle: "সেরা ব্র্যান্ডের আসল কসমেটিকস ও কেয়ার পণ্য",
-    buttonText: "রূপসজ্জা বাজার দেখুন",
-    image: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=900&q=80",
-    link: "/category/cat2",
-  },
-  {
-    id: "slide3",
-    tagline: "এক্সক্লুসিভ ফ্যাশন ও কালেকশন",
-    brandTitlePart1: "FASHION &",
-    brandTitlePart2: "LIFESTYLE",
-    subtitle: "সেরা ব্র্যান্ডের আধুনিক পোশাক ও পরিধান সামগ্রী",
-    buttonText: "কালেকশন দেখুন",
-    image: "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=900&q=80",
-    link: "/category/cat3",
-  },
-  {
-    id: "slide4",
-    tagline: "খাঁটি ও প্রিমিয়াম ইসলামিক পণ্য",
-    brandTitlePart1: "PREMIUM ISLAMIC",
-    brandTitlePart2: "MARKET",
-    subtitle: "সেরা মানের জায়নামাজ, আতর, তসবিহ ও বুটিক পণ্য",
-    buttonText: "ইসলামিক বাজার দেখুন",
-    image: "https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=900&q=80",
-    link: "/category/cat6",
-  }
+const BANNERS = [
+  "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&q=80",
+  "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=800&q=80",
+  "https://images.unsplash.com/photo-1470309864661-68328b2cd0a5?w=800&q=80"
 ];
 
-const mainCategories: CategoryCard[] = [
+const MARKET_CATEGORIES = [
   {
     id: "cat2",
-    title: "রুপসজ্জা বাজার",
-    count: "850+ পণ্য",
-    image: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=600&q=80",
-    iconBg: "bg-[#ec4899]",
-    icon: Sparkles,
-    link: "/category/cat2"
+    name: "রূপসজ্জা বাজার",
+    count: "850+",
+    icon: <Sparkles className="w-5 h-5 text-white" />,
+    iconBg: "bg-pink-500",
+    image: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=300&q=80"
   },
   {
     id: "cat3",
-    title: "কাপড় ও পরিধান",
-    count: "3200+ পণ্য",
-    image: "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=600&q=80",
-    iconBg: "bg-[#0284c7]",
-    icon: Shirt,
-    link: "/category/cat3"
+    name: "কাপড় ও পরিধান",
+    count: "3200+",
+    icon: <Shirt className="w-5 h-5 text-white" />,
+    iconBg: "bg-[#0ea5e9]",
+    image: "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=300&q=80"
   },
   {
     id: "cat4",
-    title: "উপহার বাজার",
-    count: "650+ পণ্য",
-    image: "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=600&q=80",
+    name: "উপহার বাজার",
+    count: "650+",
+    icon: <Gift className="w-5 h-5 text-white" />,
     iconBg: "bg-[#f97316]",
-    icon: Gift,
-    link: "/category/cat4"
+    image: "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=300&q=80"
   },
   {
     id: "cat6",
-    title: "ইসলামিক বাজার",
-    count: "780+ পণ্য",
-    image: "https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=600&q=80",
+    name: "ইসলামিক বাজার",
+    count: "780+",
+    icon: <Moon className="w-5 h-5 text-white" />,
     iconBg: "bg-[#059669]",
-    icon: Moon,
-    link: "/category/cat6"
+    image: "https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=300&q=80"
   }
 ];
 
 export const Home: React.FC = () => {
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [customIcons, setCustomIcons] = useState<Record<string, string>>({});
-  const [activeBanners, setActiveBanners] = useState<any[]>(bannerSlides);
-  const [categoryVisibility, setCategoryVisibility] = useState<Record<string, boolean>>({});
+  const navigate = useNavigate();
+  const [activeBanner, setActiveBanner] = React.useState(0);
 
-  useEffect(() => {
-    const unsubIcons = onSnapshot(collection(db, "category_icons"), 
-      (snapshot) => {
-        const data: Record<string, string> = {};
-        snapshot.docs.forEach(doc => {
-          data[doc.id] = doc.data().image;
-        });
-        setCustomIcons(data);
-      },
-      (error) => console.warn("Icons listener error:", error)
-    );
-
-    const unsubVisibility = onSnapshot(doc(db, "settings", "category_visibility"),
-      (snap) => {
-        if (snap.exists()) {
-          setCategoryVisibility(snap.data() as Record<string, boolean>);
-        }
-      },
-      (error) => console.warn("Visibility listener error:", error)
-    );
-
-    const unsubBanners = onSnapshot(
-      query(collection(db, "main_banners"), orderBy("order", "asc")), 
-      (snapshot) => {
-        if (!snapshot.empty) {
-          setActiveBanners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        } else {
-          setActiveBanners(bannerSlides);
-        }
-      },
-      (error) => {
-        console.warn("Banners listener error:", error);
-        setActiveBanners(bannerSlides);
-      }
-    );
-
-    return () => {
-      unsubIcons();
-      unsubVisibility();
-      unsubBanners();
-    };
+  React.useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveBanner(prev => (prev + 1) % BANNERS.length);
+    }, 4000);
+    return () => clearInterval(timer);
   }, []);
 
-  const visibleCategories = useMemo(() => {
-    return mainCategories.filter(cat => categoryVisibility[cat.id] !== false);
-  }, [categoryVisibility]);
-
-  useEffect(() => {
-    if (activeBanners.length === 0) return;
-
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % activeBanners.length);
-    }, 3000);
-    
-    return () => clearInterval(timer);
-  }, [activeBanners.length]);
-
-  const slide = activeBanners[currentSlide];
-
   return (
-    <div className="flex flex-col space-y-3 sm:space-y-4 select-none">
+    <div className="min-h-screen bg-[#f1f3f4] text-black flex flex-col font-sans select-none pb-20">
       <SEO 
-        title="All Mayadin Bazar - বিশুদ্ধ পণ্যের নতুন ঠিকানা" 
-        description="All Mayadin Bazar - সেরা পণ্য, সেরা দাম, সেরা সেবা।" 
+        title="All Mayadin Fashion - Premium Shopping & Design" 
+        description="Shop premium fashion, groceries and create professional designs with All Mayadin Fashion." 
       />
 
-      <ActiveOrderWidget />
-
-      {/* 1. Super Shop Storefront Facade */}
-      <section className="relative shrink-0">
+      <main className="flex-1 overflow-y-auto w-full">
+        {/* 1. Storefront Facade */}
         <StorefrontFacade />
-      </section>
 
-      {/* 2. Promotional Banner Slider (Auto changing every 3 seconds) */}
-      <section className="relative px-3.5 sm:px-6 shrink-0">
-        <div className="relative w-full aspect-[21/8.5] sm:aspect-[4/1] rounded-[20px] sm:rounded-[24px] overflow-hidden shadow-md bg-gray-100 border border-white/80 group">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentSlide}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.4, ease: "easeInOut" }}
-              className="absolute inset-0 w-full h-full"
-            >
-              <Link 
-                to={slide.link} 
-                className="block w-full h-full relative cursor-pointer"
-                title={slide.brandTitlePart1 || "অফার দেখুন"}
-              >
-                <img 
-                  src={slide.image} 
-                  alt="Banner" 
-                  className="w-full h-full object-cover object-center group-hover:scale-[1.02] transition-transform duration-500"
+        {/* 2. Banner Slider */}
+        <div className="px-4 mt-4">
+          <div className="relative aspect-[21/9] rounded-2xl overflow-hidden shadow-sm group">
+            {BANNERS.map((banner, idx) => (
+              <motion.img
+                key={idx}
+                src={banner}
+                alt={`Banner ${idx + 1}`}
+                className="absolute inset-0 w-full h-full object-cover"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: activeBanner === idx ? 1 : 0 }}
+                transition={{ duration: 0.8 }}
+              />
+            ))}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+            
+            {/* Dots */}
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+              {BANNERS.map((_, idx) => (
+                <div 
+                  key={idx}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${activeBanner === idx ? "w-6 bg-[#ffb703]" : "w-1.5 bg-white/50"}`}
                 />
-              </Link>
-
-              {/* Bottom Center Pagination Dots */}
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-black/25 px-2.5 py-1 rounded-full backdrop-blur-xs">
-                {activeBanners.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setCurrentSlide(idx);
-                    }}
-                    className={`transition-all duration-300 rounded-full ${
-                      currentSlide === idx 
-                        ? "w-4 h-1.5 bg-[#ffb703] shadow-xs" 
-                        : "w-1.5 h-1.5 bg-white/60 hover:bg-white"
-                    }`}
-                    aria-label={`Slide ${idx + 1}`}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </section>
-
-      {/* 3. Main Marketplace Categories Section (আমাদের প্রধান বাজার সমূহ - ঠিক স্ক্রিনশটের মতো) */}
-      <section className="flex flex-col space-y-2 px-3.5 sm:px-6">
-        {/* Section Title with Emerald Underline Bar */}
-        <div className="space-y-1 shrink-0">
-          <h2 className="text-sm sm:text-base md:text-lg font-black text-[#0f172a] tracking-tight">
-            আমাদের প্রধান বাজার সমূহ
-          </h2>
-          <div className="w-12 h-1 bg-[#008a5c] rounded-full"></div>
-        </div>
-
-        {/* 4 in a line, 2 rows (Total 8 categories) - Matches Screenshot */}
-        <div className="grid grid-cols-4 gap-2 sm:gap-3">
-          {visibleCategories.map((cat) => {
-            const IconComp = cat.icon;
-            const displayImage = customIcons[cat.id] || cat.image;
-
-            return (
-              <Link
-                key={cat.id}
-                to={cat.link}
-                style={{ touchAction: "manipulation" }}
-                className="bg-white rounded-[20px] sm:rounded-[24px] border border-gray-100 shadow-[0_2px_12px_rgba(0,0,0,0.03)] p-1.5 sm:p-2 flex flex-col items-center text-center group active:scale-90 hover:shadow-md transition-transform duration-75 relative select-none cursor-pointer"
-              >
-                {/* Product/Category Photo */}
-                <div className="w-full aspect-square rounded-[16px] sm:rounded-[18px] overflow-hidden bg-gray-50 relative">
-                  <img
-                    src={displayImage}
-                    alt={cat.title}
-                    loading="eager"
-                    decoding="async"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                  />
-                </div>
-
-                {/* Floating Colorful Circular Icon Badge */}
-                <div className="relative -mt-3.5 sm:-mt-4 z-10">
-                  <div className={`w-7 h-7 sm:w-8 sm:h-8 ${cat.iconBg} text-white rounded-full flex items-center justify-center shadow-md border-2 border-white`}>
-                    <IconComp className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.2]" />
-                  </div>
-                </div>
-
-                {/* Title & Product Count */}
-                <div className="mt-1 mb-0.5 px-0.5 flex flex-col items-center w-full">
-                  <h3 className="text-[10.5px] sm:text-[12px] font-black text-gray-900 leading-tight truncate w-full text-center">
-                    {cat.title}
-                  </h3>
-                  <span className="text-[8.5px] sm:text-[10px] font-medium text-gray-400 leading-none truncate w-full text-center mt-0.5">
-                    {cat.count}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Islamic Tilawat Spotlight Banner */}
-      <section className="px-3.5 sm:px-6">
-        <Link 
-          to="/islamic-tilawat"
-          className="block bg-gradient-to-br from-[#004d2e] to-[#002e1c] rounded-[24px] p-4 text-white shadow-md border border-[#003821] relative overflow-hidden group active:scale-[0.98] transition-all cursor-pointer"
-        >
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,215,0,0.15),transparent)] pointer-events-none" />
-          <div className="absolute top-2 right-2 opacity-10">
-            <BookOpen className="w-24 h-24" />
+              ))}
+            </div>
           </div>
-          
-          <div className="relative z-10 flex items-center justify-between gap-4">
-            <div className="space-y-1">
-              <span className="bg-[#ffd700] text-[#002214] text-[9px] font-black uppercase px-2 py-0.5 rounded-md">নতুন সংযোজন</span>
-              <h3 className="text-base font-black tracking-tight text-[#fdfbf7]">ইসলামিক তেলাওয়াত লাইব্রেরি</h3>
-              <p className="text-[11px] text-emerald-100/90 leading-tight">বিশ্বের সেরা ক্বারিদের কন্ঠে ১১৪ সূরার রিয়েল অডিও শুনুন ও ডাউনলোড করুন</p>
+        </div>
+
+        <div className="px-4 py-6">
+          {/* Section: Main Markets */}
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-6">
+              <div className="relative">
+                <h3 className="text-[19px] font-black text-[#0f172a] tracking-tight">আমাদের প্রধান বাজার সমূহ</h3>
+                <div className="absolute -bottom-2 left-0 w-10 h-1 bg-[#10b981] rounded-full" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              {MARKET_CATEGORIES.map((cat) => (
+                <motion.div
+                  key={cat.id}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => navigate(`/category/${cat.id}`)}
+                  className="bg-white rounded-[16px] p-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 flex flex-col gap-2 relative group"
+                >
+                  <div className="aspect-[4/5] rounded-[12px] overflow-hidden relative">
+                    <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                    <div className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-7 h-7 ${cat.iconBg} rounded-full flex items-center justify-center shadow-md border-2 border-white z-10`}>
+                      {React.cloneElement(cat.icon as React.ReactElement, { className: "w-3.5 h-3.5 text-white" })}
+                    </div>
+                  </div>
+                  <div className="px-0.5 pt-1.5 pb-0.5 text-center">
+                    <h4 className="text-[9px] font-black text-gray-900 leading-tight mb-0.5 line-clamp-2 h-5 flex items-center justify-center">{cat.name}</h4>
+                    <p className="text-[7px] font-bold text-gray-400">{cat.count} পণ্য</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          {/* Featured: Islamic Library (Compact & Slim for Mobile) */}
+          <motion.div 
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate('/islamic-tilawat')}
+            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br from-[#0a3d2e] to-[#052b1b] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md mb-2 sm:mb-2.5 group cursor-pointer"
+          >
+            <div className="relative z-10 flex items-center justify-between gap-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="bg-[#ffcc00] text-black text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight inline-block mb-1">
+                  নতুন সংযোজন
+                </div>
+                <h2 className="text-[13px] sm:text-[15px] font-bold mb-0.5 truncate leading-tight">
+                  ইসলামিক তেলাওয়াত লাইব্রেরি
+                </h2>
+                <p className="text-[10px] sm:text-[11px] text-white/80 truncate leading-normal">
+                  বিশ্বের সেরা ক্বারিদের কন্ঠে ১১৪ সূরার অডিও ও ডাউনলোড
+                </p>
+              </div>
+              
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/95 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
+                <ChevronRight className="w-3.5 h-3.5 text-[#0a3d2e] stroke-[1.5]" />
+              </div>
             </div>
             
-            <div className="w-10 h-10 bg-white text-[#004d2e] rounded-full flex items-center justify-center shrink-0 shadow-md group-hover:bg-[#ffd700] group-hover:text-gray-900 transition-colors">
-              <ChevronRight className="w-6 h-6 stroke-[3]" />
+            {/* Background elements */}
+            <div className="absolute top-1/2 -translate-y-1/2 -right-2 opacity-[0.08] pointer-events-none">
+              <BookOpen className="w-16 h-16 sm:w-20 sm:h-20 stroke-[1]" />
             </div>
-          </div>
-        </Link>
-      </section>
+          </motion.div>
+
+          {/* Creative Studio Banner (Compact & Slim for Mobile) */}
+          <motion.div 
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate('/pixel-editing-tools')}
+            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md group cursor-pointer"
+          >
+            <div className="relative z-10 flex items-center justify-between gap-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="bg-[#00f28e] text-black text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight inline-block mb-1">
+                  ক্রিয়েটিভ টুলস
+                </div>
+                <h2 className="text-[13px] sm:text-[15px] font-bold mb-0.5 truncate leading-tight">
+                  Pixel Editing Tools
+                </h2>
+                <p className="text-[10px] sm:text-[11px] text-white/70 truncate leading-normal">
+                  আপনার ছবিকে দিন প্রফেশনাল লুক, ফিল্টার ও এডিটিং ফ্রিতে
+                </p>
+              </div>
+              
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 border border-white/15 flex items-center justify-center backdrop-blur-md shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
+                <ChevronRight className="w-3.5 h-3.5 text-white stroke-[1.5]" />
+              </div>
+            </div>
+            
+            {/* Background elements */}
+            <div className="absolute top-1/2 -translate-y-1/2 -right-2 opacity-[0.08] pointer-events-none">
+              <Layers className="w-16 h-16 sm:w-20 sm:h-20 stroke-[1]" />
+            </div>
+          </motion.div>
+        </div>
+      </main>
     </div>
   );
 };
+
+
+const NavButton: React.FC<{ icon: React.ReactNode; active?: boolean }> = ({ icon, active }) => (
+  <button className={`p-2 transition-all active:scale-90 relative ${active ? "text-blue-500" : "text-white/40 hover:text-white/60"}`}>
+    {React.cloneElement(icon as React.ReactElement, { className: "w-8 h-8" })}
+    {active && (
+      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-1 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]" />
+    )}
+  </button>
+);

@@ -134,6 +134,19 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
     };
   }, [isPlaying]);
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isFs = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+      setIsFullscreen(isFs);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
   // 3. Select and play a video
   const selectVideo = (video: VideoTilawatItem) => {
     setCurrentVideo(video);
@@ -211,16 +224,45 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
     selectVideo(videos[prevIndex]);
   };
 
+  const handleVideoEnded = () => {
+    setIsPlaying(false);
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
+    if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
+    }
+    onBack();
+  };
+
   const toggleFullscreen = () => {
-    if (!playerContainerRef.current) return;
-    if (!document.fullscreenElement) {
-      playerContainerRef.current.requestFullscreen().then(() => {
-        setIsFullscreen(true);
-      }).catch(() => {});
+    const container = playerContainerRef.current;
+    const video = videoRef.current;
+    if (!container) return;
+
+    const isFs = !!(document.fullscreenElement || (document as any).webkitFullscreenElement);
+    if (!isFs) {
+      if (container.requestFullscreen) {
+        container.requestFullscreen().catch(() => {
+          if (video && (video as any).webkitEnterFullscreen) {
+            (video as any).webkitEnterFullscreen();
+          }
+        });
+      } else if ((container as any).webkitRequestFullscreen) {
+        (container as any).webkitRequestFullscreen();
+      } else if (video && (video as any).webkitEnterFullscreen) {
+        (video as any).webkitEnterFullscreen();
+      }
     } else {
-      document.exitFullscreen().then(() => {
-        setIsFullscreen(false);
-      }).catch(() => {});
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
     }
   };
 
@@ -376,6 +418,12 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
           <div className="w-full max-w-4xl mx-auto px-0 sm:px-4 pt-0 sm:pt-3">
             <div 
               ref={playerContainerRef}
+              style={{
+                transform: "translate3d(0, 0, 0)",
+                WebkitTransform: "translate3d(0, 0, 0)",
+                backfaceVisibility: "hidden",
+                WebkitBackfaceVisibility: "hidden",
+              }}
               className="relative w-full aspect-video sm:rounded-2xl overflow-hidden bg-black shadow-2xl border-y sm:border border-cyan-500/20 group"
               onMouseMove={resetControlsTimeout}
               onClick={resetControlsTimeout}
@@ -387,13 +435,22 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
                   src={currentVideo.videoUrl}
                   poster={currentVideo.thumbnailUrl}
                   playsInline
+                  webkit-playsinline="true"
+                  x5-playsinline="true"
+                  controlsList="nodownload"
                   preload="metadata"
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
-                  onEnded={handleNextVideo}
+                  onEnded={handleVideoEnded}
                   onClick={togglePlay}
+                  style={{
+                    transform: "translateZ(0)",
+                    WebkitTransform: "translateZ(0)",
+                    willChange: "transform",
+                    backgroundColor: "#000000",
+                  }}
                   className="w-full h-full object-cover sm:object-contain bg-black cursor-pointer"
                 />
               ) : (

@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Facebook, Twitter, Instagram, Youtube, Mail, Phone, MapPin } from "lucide-react";
+import { Share2, Mail, Phone, MapPin } from "lucide-react";
 
 export const Footer: React.FC = () => {
   return (
@@ -19,7 +19,7 @@ export const Footer: React.FC = () => {
             Your premium destination for fresh groceries and high-quality household essentials in Bangladesh.
           </p>
           <div className="flex items-center gap-4">
-            {[Facebook, Twitter, Instagram, Youtube].map((Icon, i) => (
+            {[Share2, Mail, Phone, MapPin].map((Icon, i) => (
               <a key={i} href="#" className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-[#004b23] hover:text-white transition-all">
                 <Icon className="w-5 h-5" />
               </a>

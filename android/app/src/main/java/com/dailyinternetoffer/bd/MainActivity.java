@@ -7,9 +7,17 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.widget.FrameLayout;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebChromeClient;
 import com.onesignal.OneSignal;
 import com.onesignal.debug.LogLevel;
 import com.onesignal.Continue;
@@ -20,6 +28,93 @@ public class MainActivity extends BridgeActivity {
     private static final String TAG = "AlMayadinDeepLink";
     private static final String ONESIGNAL_APP_ID = "d28392ee-2a0f-4f62-ba65-03fb3e0915ab";
     private static final int PERMISSION_REQUEST_CODE = 1010;
+
+    private VideoWebChromeClient videoChromeClient;
+
+    public class VideoWebChromeClient extends BridgeWebChromeClient {
+        private View customView;
+        private WebChromeClient.CustomViewCallback customViewCallback;
+        private FrameLayout customViewContainer;
+        private int originalSystemUiVisibility;
+        private int originalOrientation;
+
+        public VideoWebChromeClient(Bridge bridge) {
+            super(bridge);
+        }
+
+        @Override
+        public void onShowCustomView(View view, WebChromeClient.CustomViewCallback callback) {
+            if (customView != null) {
+                onHideCustomView();
+                return;
+            }
+
+            customView = view;
+            customViewCallback = callback;
+            originalOrientation = getRequestedOrientation();
+            originalSystemUiVisibility = getWindow().getDecorView().getSystemUiVisibility();
+
+            if (customViewContainer == null) {
+                customViewContainer = new FrameLayout(MainActivity.this);
+                customViewContainer.setBackgroundColor(0xFF000000); // Black background to avoid flickering
+                ViewGroup decor = (ViewGroup) getWindow().getDecorView();
+                decor.addView(customViewContainer, new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                ));
+            }
+
+            customViewContainer.addView(view, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+            customViewContainer.setVisibility(View.VISIBLE);
+
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().setVisibility(View.GONE);
+            }
+
+            // Enter immersive fullscreen
+            getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            );
+        }
+
+        @Override
+        public void onHideCustomView() {
+            if (customView == null) return;
+
+            getWindow().getDecorView().setSystemUiVisibility(originalSystemUiVisibility);
+            setRequestedOrientation(originalOrientation);
+
+            if (customViewContainer != null) {
+                customViewContainer.removeView(customView);
+                customViewContainer.setVisibility(View.GONE);
+            }
+
+            if (customViewCallback != null) {
+                try {
+                    customViewCallback.onCustomViewHidden();
+                } catch (Exception ignored) {}
+                customViewCallback = null;
+            }
+
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                getBridge().getWebView().setVisibility(View.VISIBLE);
+            }
+
+            customView = null;
+        }
+
+        public boolean isCustomViewShowing() {
+            return customView != null;
+        }
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -68,8 +163,44 @@ public class MainActivity extends BridgeActivity {
             e.printStackTrace();
         }
 
+        // Configure WebView for hardware accelerated HTML5 video & audio playback
+        try {
+            WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+            if (webView != null) {
+                WebSettings settings = webView.getSettings();
+                settings.setMediaPlaybackRequiresUserGesture(false);
+                settings.setJavaScriptEnabled(true);
+                settings.setDomStorageEnabled(true);
+                settings.setDatabaseEnabled(true);
+                settings.setAllowFileAccess(true);
+                settings.setAllowContentAccess(true);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+                }
+
+                // Force hardware accelerated layer for video rendering
+                webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                webView.setBackgroundColor(0xFFFFFFFF);
+
+                // Set enhanced video WebChromeClient with fullscreen attach/detach support
+                videoChromeClient = new VideoWebChromeClient(getBridge());
+                webView.setWebChromeClient(videoChromeClient);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to configure hardware-accelerated video webview: " + e.getMessage());
+        }
+
         // Request runtime permissions: Camera, Location, Notifications
         requestRequiredPermissions();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (videoChromeClient != null && videoChromeClient.isCustomViewShowing()) {
+            videoChromeClient.onHideCustomView();
+            return;
+        }
+        super.onBackPressed();
     }
 
     @Override

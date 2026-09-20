@@ -8,10 +8,10 @@ interface BrandVariant {
 }
 
 const VARIANTS: BrandVariant[] = [
-  { top: "ALL", main: "MAYADIN", sub: "BAZAR" },
-  { top: "অল", main: "মায়াদিন", sub: "বাজার" },
   { top: "সেরা", main: "All MAYADIN FASHION", sub: "সুপারশপ" },
-  { top: "ALL", main: "MAYADIN", sub: "BAZAR" },
+  { top: "সেরা", main: "All MAYADIN FASHION", sub: "সুপারশপ" },
+  { top: "সেরা", main: "All MAYADIN FASHION", sub: "সুপারশপ" },
+  { top: "সেরা", main: "All MAYADIN FASHION", sub: "সুপারশপ" },
 ];
 
 export const AnimatedBrandLogo: React.FC<{ isCompact?: boolean }> = ({ isCompact = false }) => {

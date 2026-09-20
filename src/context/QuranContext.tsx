@@ -378,8 +378,19 @@ export const QuranProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       setIsPlaying(false);
       cleanActiveObjectURL();
-      
-      alert("অডিও প্লেব্যাক ত্রুটি: ফাইলটি লোড করা সম্ভব হয়নি। অনুগ্রহ করে ইন্টারনেট সংযোগ পরীক্ষা করুন অথবা অন্য সূরা/ক্বারী চেষ্টা করুন।");
+
+      // Fallback from proxy to direct URL if it failed
+      const currentSrc = audioEl?.src || "";
+      if (currentSrc.includes("/api/audio-proxy") && currentSurahRef.current && currentReciterRef.current) {
+        const directUrl = getSurahAudioUrl(currentReciterRef.current.serverUrl, currentSurahRef.current.number);
+        console.warn("Proxy audio failed, attempting direct stream:", directUrl);
+        if (audioEl) {
+          audioEl.src = directUrl;
+          audioEl.load();
+          audioEl.play().catch(pErr => console.warn("Fallback direct playback error:", pErr));
+          return;
+        }
+      }
     };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
@@ -504,15 +515,9 @@ export const QuranProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         console.warn("Failed to retrieve from Cache Storage:", cacheErr);
       }
 
-      if (!isLocal && !navigator.onLine) {
-        alert("এই সূরাটি অফলাইনে শোনার জন্য ডাউনলোড করা নেই। অনুগ্রহ করে ইন্টারনেট সংযোগ চালু করুন।");
-        setIsPlaying(false);
-        return;
-      }
-
       if (!isLocal) {
-        // Route through our high-performance server-side proxy to completely bypass CORS, referer blocks and SSL handshake issues
-        audioSource = `/api/audio-proxy?url=${encodeURIComponent(audioUrl)}`;
+        // Direct stream: mp3quran.net supports CORS, Range requests, and CDN acceleration natively on Web & Android
+        audioSource = audioUrl;
       }
 
       setCurrentReciter(reciter);
@@ -542,7 +547,7 @@ export const QuranProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           await audioRef.current.play();
           setIsPlaying(true);
         } catch (playErr) {
-          console.warn("Playback autoplay prevented:", playErr);
+          console.warn("Playback autoplay prevented or loading:", playErr);
           setIsPlaying(false);
         }
       } else {
@@ -551,7 +556,6 @@ export const QuranProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (err: any) {
       console.error("Critical playSurah error:", err);
       setIsPlaying(false);
-      alert(`তেলাওয়াত প্লেব্যাক শুরু করতে সমস্যা হয়েছে: ${err.message || err}`);
     }
   };
 
@@ -572,15 +576,6 @@ export const QuranProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!audio.src || audio.src === "" || audio.src.endsWith("/")) {
         playSurahInternal(rec, sur, true);
         return;
-      }
-
-      const isOfflineMode = !navigator.onLine;
-      if (isOfflineMode) {
-        const isDownloadedFile = isDownloaded(rec?.id || "", sur.number);
-        if (!isDownloadedFile) {
-          alert("অফলাইনে এই সূরা শুনতে হলে প্রথমে এটি ডাউনলোড করুন।");
-          return;
-        }
       }
 
       audio.play()
@@ -643,15 +638,7 @@ export const QuranProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }));
 
     try {
-      // 1. Check storage space estimate
-      if (navigator.storage && navigator.storage.estimate) {
-        const est = await navigator.storage.estimate();
-        const avail = (est.quota || 0) - (est.usage || 0);
-        if (avail < 50 * 1024 * 1024) { // Needs at least 50MB safety
-          throw new Error("INSUFFICIENT_STORAGE");
-        }
-      }
-
+      // 1. Storage check skipped for mobile WebView safety
       const audioUrl = getSurahAudioUrl(reciter.serverUrl, surah.number);
       // Route download request through our proxy to ensure 100% CORS capability
       const proxyUrl = `/api/audio-proxy?url=${encodeURIComponent(audioUrl)}`;
@@ -716,11 +703,6 @@ export const QuranProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ...prev,
         [key]: { status: "failed", progress: 0 }
       }));
-      if (err.message === "INSUFFICIENT_STORAGE") {
-        alert("পর্যাপ্ত স্টোরেজ স্পেস নেই! অনুগ্রহ করে কিছু ফাইল ডিলিট করে চেষ্টা করুন।");
-      } else {
-        alert(`${surah.name} ডাউনলোড ব্যর্থ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।`);
-      }
     }
   };
 
@@ -730,16 +712,6 @@ export const QuranProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       `“${reciter.name}” এর সম্পূর্ণ কোরআনের ১১৪টি সূরা ডাউনলোড করতে প্রায় ৫০০-৮০০ মেগাবাইট ডিভাইস স্টোরেজ লাগতে পারে। আপনি কি চালিয়ে যেতে চান?`
     );
     if (!consent) return;
-
-    // Estimate storage first
-    if (navigator.storage && navigator.storage.estimate) {
-      const est = await navigator.storage.estimate();
-      const avail = (est.quota || 0) - (est.usage || 0);
-      if (avail < 800 * 1024 * 1024) { // Check for 800MB safety
-        alert("আপনার ডিভাইসে পর্যাপ্ত স্টোরেজ স্পেস নেই (কমপক্ষে ৮০০ মেগাবাইট প্রয়োজন)!");
-        return;
-      }
-    }
 
     // Run queue of downloads
     for (const surah of SURAHS) {
