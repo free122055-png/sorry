@@ -262,8 +262,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const registerWithEmail = async (data: RegisterData): Promise<User> => {
-    // 1. Try server-assisted registration for high reliability (handles existing accounts, password sync, custom tokens)
+    // 1. Try server-assisted registration for high reliability with a 6s timeout guard
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
       const apiRes = await fetch(getApiUrl("/api/auth/register-verified-user"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -276,8 +279,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           photoURL: data.photoURL || "",
           isPhoneVerified: data.isPhoneVerified,
           otpState: data.otpState || (data.isPhoneVerified ? "OTP_VERIFIED" : undefined)
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
 
       if (apiRes.ok) {
         const resData = await apiRes.json();

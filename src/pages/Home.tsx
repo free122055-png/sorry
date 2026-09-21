@@ -163,6 +163,31 @@ export const Home: React.FC = () => {
             </div>
           </motion.div>
 
+          {/* Featured: Caption Ghor (Caption Library) */}
+          <motion.div 
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate('/caption-ghor')}
+            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-r from-[#1b263b] via-[#415a77] to-[#1b263b] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md mb-2 sm:mb-2.5 group cursor-pointer"
+          >
+            <div className="relative z-10 flex items-center justify-between gap-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="bg-pink-500 text-white text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight inline-block mb-1">
+                  নতুন সংযোজন
+                </div>
+                <h2 className="text-[13px] sm:text-[15px] font-bold mb-0.5 truncate leading-tight">
+                  ❝ ক্যাপশন ঘর (Caption Library)
+                </h2>
+                <p className="text-[10px] sm:text-[11px] text-white/80 truncate leading-normal">
+                  ভালোবাসা, কষ্ট, ইসলামিক, অ্যাটিটিউডসহ সব ধরনের ক্যাপশন ও স্ট্যাটাস
+                </p>
+              </div>
+              
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/95 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform flex-shrink-0 text-[#1b263b]">
+                <ChevronRight className="w-3.5 h-3.5 stroke-[1.5]" />
+              </div>
+            </div>
+          </motion.div>
+
           {/* Creative Studio Banner (Compact & Slim for Mobile) */}
           <motion.div 
             whileTap={{ scale: 0.98 }}

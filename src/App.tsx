@@ -74,6 +74,7 @@ const Contact = safeLazy(() => import("./pages/Contact"), "Contact");
 const AccountSettings = safeLazy(() => import("./pages/AccountSettings"), "AccountSettings");
 const DownloadCert = safeLazy(() => import("./pages/DownloadCert"));
 const PixelEditingTools = safeLazy(() => import("./pages/PixelEditingTools"), "PixelEditingTools");
+const CaptionGhorPage = safeLazy(() => import("./pages/CaptionGhorPage"), "CaptionGhorPage");
 
 const LoadingFallback = () => (
   <div className="min-h-[40vh] flex flex-col items-center justify-center p-4">
@@ -225,6 +226,7 @@ function AppLayout() {
             <Route path="/search" element={<Categories />} />
             <Route path="/islamic-tilawat" element={<IslamicTilawat />} />
             <Route path="/tilawat" element={<IslamicTilawat />} />
+            <Route path="/caption-ghor" element={<CaptionGhorPage />} />
             <Route path="/banner-offer/:bannerId" element={<BannerOfferPage />} />
             <Route path="/offer/:bannerId" element={<BannerOfferPage />} />
           </Routes>

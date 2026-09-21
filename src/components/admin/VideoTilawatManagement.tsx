@@ -483,7 +483,7 @@ export const VideoTilawatManagement: React.FC = () => {
         const uploadViaStream = (file: File): Promise<string> => {
           return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
-            xhr.open("POST", `/api/upload/video-stream?filename=${encodeURIComponent(file.name)}`);
+            xhr.open("POST", getApiUrl(`/api/upload/video-stream?filename=${encodeURIComponent(file.name)}`));
             
             xhr.upload.onprogress = (event) => {
               if (event.lengthComputable) {

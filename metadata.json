@@ -1,6 +1,6 @@
 {
-  "name": "All MAYADIN FASHION",
-  "description": "All MAYADIN FASHION - Official e-commerce mobile app and marketplace for fresh foods, groceries, fashion, electronics, and daily essentials.",
+  "name": "Al Mayadin Bazar",
+  "description": "Al Mayadin Bazar - Official e-commerce mobile app and marketplace for fresh foods, groceries, fashion, electronics, and daily essentials.",
   "requestFramePermissions": ["camera", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -4,7 +4,7 @@ import {
   ArrowLeft, Menu, Save, Upload, X, Plus, Tag, CheckCircle2, 
   AlertCircle, Percent, Image as ImageIcon, PackagePlus, 
   Package, Truck, ClipboardList, LayoutDashboard, Settings,
-  LayoutGrid, Users, Download, KeyRound, Copy, Home as HomeIcon, Bell, Mail, Eye, Radio, Mic, Video, Layout, Type
+  LayoutGrid, Users, Download, KeyRound, Copy, Home as HomeIcon, Bell, Mail, Eye, Radio, Mic, Video, Layout, Type, Sparkles
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../lib/firebase";
@@ -23,6 +23,7 @@ import { ReciterManagement } from "../components/admin/ReciterManagement";
 import { VideoTilawatManagement } from "../components/admin/VideoTilawatManagement";
 import { TemplateManagement } from "../components/admin/TemplateManagement";
 import { FontManagement } from "../components/admin/FontManagement";
+import { CaptionManagement } from "../components/admin/CaptionManagement";
 import { IntegrationCenter } from "../components/admin/IntegrationCenter";
 import { UserManagement } from "../components/admin/UserManagement";
 import { OneSignalConfig } from "../components/admin/OneSignalConfig";
@@ -57,7 +58,7 @@ OVKwXvSuAXa961yvmxhloAvVNj3PHewurSsi+j//+6+EtA9G5LJmj+1BBhxglwOk
 export const Admin: React.FC = () => {
   // Navigation Menu State
   const [activeMenu, setActiveMenu] = useState<
-    "all-products" | "add-product" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management"
+    "all-products" | "add-product" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management" | "caption-management"
   >("all-products");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedUserForNotification, setSelectedUserForNotification] = useState<any>(null);
@@ -489,6 +490,15 @@ export const Admin: React.FC = () => {
                   }}
                 />
                 <MenuButton
+                  icon={<Sparkles className="text-pink-600" />}
+                  label="❝ ক্যাপশন ঘর ম্যানেজমেন্ট"
+                  active={activeMenu === "caption-management"}
+                  onClick={() => {
+                    setActiveMenu("caption-management");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
                   icon={<KeyRound className="text-amber-500" />}
                   label="🔑 সাইনিং কি-স্টোর (.keystore)"
                   active={activeMenu === "signing-keystore"}
@@ -732,9 +742,9 @@ export const Admin: React.FC = () => {
         {/* VIEW 1: ALL PRODUCTS MANAGEMENT (VIEW, EDIT, DELETE) */}
         {activeMenu === "all-products" ? (
           <ProductManagement onNavigateToAddProduct={() => setActiveMenu("add-product")} />
-        ) : activeMenu === "font-management" ? (
-          <div className="w-full max-w-5xl px-2 sm:px-4 py-4">
-            <FontManagement />
+        ) : activeMenu === "caption-management" ? (
+          <div className="w-full max-w-6xl px-2 sm:px-4 py-4">
+            <CaptionManagement />
           </div>
         ) : activeMenu === "template-management" ? (
           <div className="w-full max-w-6xl px-2 sm:px-4 py-4">

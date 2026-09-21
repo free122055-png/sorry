@@ -22,15 +22,15 @@ export const PERMANENT_IMGBB_API_KEY = typeof process !== "undefined" && process
 
 export const NOTIFICATION_BANNER_PRESETS = [
   {
-    label: "🌾 বাসমতি চাল স্পেশাল (আইডি: 458)",
-    title: "All MAYADIN FASHION স্পেশাল বাসমতি চাল মেগা অফার!",
-    message: "প্রিমিয়াম বাসমতি চাল ৫ কেজিতে পাচ্ছেন ১৩০ টাকা ছাড়! স্টক সীমিত, এখনই অর্ডার করুন।",
+    label: "🌾 স্পেশাল মেগা অফার ব্যানার",
+    title: "Al Mayadin Bazar স্পেশাল মেগা অফার!",
+    message: "আজকের আকর্ষণীয় অফার ও ডিসকাউন্ট উপভোগ করুন। স্টক সীমিত, এখনই অর্ডার করুন।",
     imageUrl: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=800&q=80",
-    productId: "458"
+    productId: ""
   },
   {
     label: "🛍️ মেগা গ্রোসারি ডিসকাউন্ট",
-    title: "All MAYADIN FASHION: আজকের সেরা গ্রোসারি অফার!",
+    title: "Al Mayadin Bazar: আজকের সেরা গ্রোসারি অফার!",
     message: "দৈনন্দিন বাজার সদাইয়ে আজই উপভোগ করুন আকর্ষণীয় ছাড় ও দ্রুত হোম ডেলিভারি।",
     imageUrl: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80",
     productId: ""
@@ -38,14 +38,14 @@ export const NOTIFICATION_BANNER_PRESETS = [
   {
     label: "🥬 তাজা শাকসবজি ও ফলমূল",
     title: "ফার্ম ফ্রেশ তাজা সবজি ও প্রিমিয়াম ফল পৌঁছে যাবে ঘরে!",
-    message: "শতভাগ সতেজ ও ফরমালিনমুক্ত শাকসবজি অর্ডার করুন All MAYADIN FASHIONে।",
+    message: "শতভাগ সতেজ ও ফরমালিনমুক্ত শাকসবজি অর্ডার করুন Al Mayadin Bazar এ।",
     imageUrl: "https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=800&q=80",
     productId: ""
   },
   {
-    label: "🍯 খাঁটি মধু ও প্রিমিয়াম মসলা",
-    title: "খাঁটি সুন্দরবনের মধু ও অরিজিনাল মসলা কালেকশন!",
-    message: "অরিজিনাল কোয়ালিটির খাঁটি মসলা ও মধু পাচ্ছেন বিশেষ অফার মূল্যে।",
+    label: "🍯 খাঁটি মধু ও প্রিমিয়াম কালেকশন",
+    title: "খাঁটি সুন্দরবনের মধু ও অরিজিনাল কালেকশন!",
+    message: "অরিজিনাল কোয়ালিটির খাঁটি পণ্য পাচ্ছেন বিশেষ অফার মূল্যে।",
     imageUrl: "https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=800&q=80",
     productId: ""
   }
@@ -66,10 +66,10 @@ export const OneSignalConfig: React.FC<OneSignalConfigProps> = ({ onBack, preSel
     imgbbApiKey: PERMANENT_IMGBB_API_KEY
   });
   const [testPayload, setTestPayload] = useState({
-    title: "All MAYADIN FASHION স্পেশাল বাসমতি চাল মেগা অফার!",
-    message: "প্রিমিয়াম বাসমতি চাল ৫ কেজিতে পাচ্ছেন ১৩০ টাকা ছাড়! স্টক সীমিত, এখনই অর্ডার করুন।",
-    imageUrl: "https://images.unsplash.com/photo-1586201375761-83865001e31c?w=800&q=80",
-    productId: "458"
+    title: "Al Mayadin Bazar স্পেশাল অফার ও ডিসকাউন্ট!",
+    message: "আজকের আকর্ষণীয় অফার উপভোগ করুন। স্টক সীমিত, এখনই অর্ডার করুন।",
+    imageUrl: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80",
+    productId: ""
   });
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -1206,7 +1206,7 @@ export const OneSignalConfig: React.FC<OneSignalConfigProps> = ({ onBack, preSel
                     গ্রাহকের ফোনে যেভাবে নোটিফিকেশন আসবে (Live Android Mockup)
                   </label>
                   <span className="text-[10px] font-black text-[#004b23] bg-[#004b23]/10 px-2 py-0.5 rounded-full">
-                    All MAYADIN FASHION
+                    Al Mayadin Bazar
                   </span>
                 </div>
 
@@ -1215,12 +1215,12 @@ export const OneSignalConfig: React.FC<OneSignalConfigProps> = ({ onBack, preSel
                   <div className="flex items-center justify-between text-gray-300 text-xs">
                     <div className="flex items-center gap-2">
                       <img 
-                        src="/public/almayadin_logo.jpg" 
-                        onError={(e: any) => { e.target.src = "https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80"; }}
+                        src="/almayadin_logo.jpg" 
+                        onError={(e: any) => { e.target.src = "/app_icon.png"; }}
                         alt="Logo" 
                         className="w-5 h-5 rounded-full object-cover ring-1 ring-emerald-500" 
                       />
-                      <span className="font-bold text-gray-200 text-xs">All MAYADIN FASHION (Al-Mayadin Bazar)</span>
+                      <span className="font-bold text-gray-200 text-xs">Al Mayadin Bazar</span>
                       <span className="text-gray-400 text-[10px]">এখন</span>
                       <Bell className="w-3 h-3 text-emerald-400" />
                     </div>

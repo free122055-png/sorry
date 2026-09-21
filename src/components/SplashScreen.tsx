@@ -83,7 +83,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
             <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-3xl overflow-hidden shadow-lg bg-white flex items-center justify-center border border-gray-100">
               <img
                 src="/app_icon.png"
-                alt="All MAYADIN FASHION"
+                alt="Al Mayadin Bazar"
                 className="w-full h-full object-contain"
                 loading="eager"
                 decoding="sync"
@@ -97,7 +97,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
               className="mt-5 text-center"
             >
               <h1 className="text-xl sm:text-2xl font-black tracking-wider text-[#005a36] uppercase font-sans">
-                All MAYADIN FASHION
+                Al Mayadin Bazar
               </h1>
               <p className="text-xs font-semibold text-gray-500 tracking-widest mt-1">
                 ONLINE SHOPPING & GROCERY

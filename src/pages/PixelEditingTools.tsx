@@ -582,41 +582,30 @@ export const PixelEditingTools: React.FC = () => {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       const filename = `PixelLab_UltraHD_${finalCanvas.width}x${finalCanvas.height}_${timestamp}.${format === 'png' ? 'png' : 'jpg'}`;
 
-      // Directly create a binary Blob URL for true local file download into phone's storage (no Google involved)
-      await new Promise<void>((resolve, reject) => {
-        finalCanvas.toBlob((blob) => {
-          if (!blob) {
-            reject(new Error("Blob generation failed"));
-            return;
-          }
-          const blobUrl = URL.createObjectURL(blob);
-          
-          // Trigger native mobile file download directly to device storage (Downloads / Gallery)
-          const link = document.createElement("a");
-          link.href = blobUrl;
-          link.download = filename;
-          link.setAttribute("download", filename);
-          link.style.display = "none";
-          document.body.appendChild(link);
-          link.click();
-          
-          // Set saved success info with preview and direct re-download capability
-          setSavedSuccessInfo({
-            url: blobUrl,
-            filename: filename,
-            resolution: `${finalCanvas.width} × ${finalCanvas.height} px`,
-            format: format.toUpperCase()
-          });
-
-          setTimeout(() => {
-            if (document.body.contains(link)) {
-              document.body.removeChild(link);
-            }
-          }, 4000);
-
-          resolve();
-        }, mime, 1.0);
+      // Use Data URL for 100% robust mobile download support in WebView & PWA
+      const dataUrl = finalCanvas.toDataURL(mime, 1.0);
+      
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = filename;
+      link.setAttribute("download", filename);
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      
+      // Set saved success info with preview and direct re-download capability
+      setSavedSuccessInfo({
+        url: dataUrl,
+        filename: filename,
+        resolution: `${finalCanvas.width} × ${finalCanvas.height} px`,
+        format: format.toUpperCase()
       });
+
+      setTimeout(() => {
+        if (document.body.contains(link)) {
+          document.body.removeChild(link);
+        }
+      }, 1000);
 
       setIsShareModalOpen(false);
     } catch (err) {
@@ -1246,7 +1235,7 @@ export const PixelEditingTools: React.FC = () => {
       {/* 3. Main Canvas */}
       <main 
         ref={canvasContainerRef}
-        className="flex-1 min-h-0 flex items-center justify-center p-3 sm:p-4 overflow-hidden relative bg-white touch-none select-none overscroll-none" 
+        className="flex-1 min-h-0 flex items-center justify-center p-3 sm:p-4 overflow-hidden relative bg-[#0c0e15] touch-none select-none overscroll-none" 
         onClick={() => setActiveLayerId(null)}
       >
         <div 
