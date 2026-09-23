@@ -1431,9 +1431,16 @@ async function startServer() {
     }
   });
 
-  const PERMANENT_ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID || "d28392ee-2a0f-4f62-ba65-03fb3e0915ab";
-  const PERMANENT_ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY || Buffer.from("b3NfdjJfYXBwXzJrYnpmM3JrYjVod2ZvdGZhcDV0NGNpdnZvYm1jMnN6Mm0zdW9lZXpzN3Vhb29lbWM0bTJ6cHBwdzY0azd5d2huM21yeXpuemJ2N3lhNHY0cmIzc3F3cnNzeGFwNW5wdW9iZWY3b2E=", "base64").toString("utf-8");
-  const PERMANENT_IMGBB_API_KEY = process.env.IMGBB_API_KEY || Buffer.from("NTJlY2Y5ZWI0NGYzMmQyYTg4ZDIxMGNhMzM5OWMwNTQ=", "base64").toString("utf-8");
+  const getEnvVal = (val: string | undefined): string => {
+    if (!val) return "";
+    const trimmed = val.trim();
+    if (trimmed === "" || trimmed === "undefined" || trimmed === "null" || trimmed === "[object Object]") return "";
+    return trimmed;
+  };
+
+  const PERMANENT_ONESIGNAL_APP_ID = getEnvVal(process.env.ONESIGNAL_APP_ID) || "d28392ee-2a0f-4f62-ba65-03fb3e0915ab";
+  const PERMANENT_ONESIGNAL_REST_API_KEY = getEnvVal(process.env.ONESIGNAL_REST_API_KEY) || Buffer.from("b3NfdjJfYXBwXzJrYnpmM3JrYjVod2ZvdGZhcDV0NGNpdnZvYm1jMnN6Mm0zdW9lZXpzN3Vhb29lbWM0bTJ6cHBwdzY0azd5d2huM21yeXpuemJ2N3lhNHY0cmIzc3F3cnNzeGFwNW5wdW9iZWY3b2E=", "base64").toString("utf-8");
+  const PERMANENT_IMGBB_API_KEY = getEnvVal(process.env.IMGBB_API_KEY) || Buffer.from("NTJlY2Y5ZWI0NGYzMmQyYTg4ZDIxMGNhMzM5OWMwNTQ=", "base64").toString("utf-8");
 
   // Central Notification Service (OneSignal)
   app.get("/api/notifications/config", (req, res) => {
@@ -1586,12 +1593,39 @@ async function startServer() {
 
   app.post("/api/notifications/send", async (req, res) => {
     try {
-      let onesignalAppId = (req.body?.appId || process.env.ONESIGNAL_APP_ID || PERMANENT_ONESIGNAL_APP_ID).trim();
+      let onesignalAppId = "";
+      let onesignalApiKey = "";
+
+      // 1. Try Firestore REST first
+      try {
+        const fsUrl = "https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/configs/integration_onesignal";
+        const fsRes = await fetch(fsUrl);
+        if (fsRes.ok) {
+          const fsData = await fsRes.json();
+          const fields = fsData.fields || {};
+          if (fields.restApiKey?.stringValue) {
+            onesignalApiKey = fields.restApiKey.stringValue.trim().replace(/\s+/g, '');
+          }
+          if (fields.appId?.stringValue) {
+            const fsAppId = fields.appId.stringValue.trim();
+            if (fsAppId.length <= 36) onesignalAppId = fsAppId;
+          }
+        }
+      } catch (err) {
+        console.warn("[OneSignal] Firestore REST lookup warning:", err);
+      }
+
+      // 2. Fallback to request body or env or permanent keys
+      if (!onesignalAppId) {
+        onesignalAppId = (req.body?.appId || getEnvVal(process.env.ONESIGNAL_APP_ID) || PERMANENT_ONESIGNAL_APP_ID).trim();
+      }
       if (onesignalAppId.length > 36) onesignalAppId = onesignalAppId.substring(0, 36);
 
-      let onesignalApiKey = (req.body?.restApiKey || process.env.ONESIGNAL_REST_API_KEY || PERMANENT_ONESIGNAL_REST_API_KEY).trim().replace(/\s+/g, '');
-
       if (!onesignalApiKey) {
+        onesignalApiKey = (req.body?.restApiKey || getEnvVal(process.env.ONESIGNAL_REST_API_KEY) || PERMANENT_ONESIGNAL_REST_API_KEY).trim().replace(/\s+/g, '');
+      }
+
+      if (onesignalApiKey === "undefined" || onesignalApiKey === "null") {
         onesignalApiKey = PERMANENT_ONESIGNAL_REST_API_KEY;
       }
 
@@ -1681,8 +1715,11 @@ async function startServer() {
 
       if (target_ids && target_ids.length > 0) {
         payload.include_external_user_ids = target_ids;
+        payload.include_aliases = {
+          external_id: target_ids
+        };
       } else {
-        payload.included_segments = ["Total Subscriptions", "Subscribed Users"];
+        payload.included_segments = ["Total Subscriptions", "Subscribed Users", "All"];
       }
 
       let pushDelivered = false;

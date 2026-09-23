@@ -3,13 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { 
   Plus, ShoppingBag, ChevronRight,
   Sparkles, Gift, BookOpen, Music,
-  Shirt, Moon, Layers
+  Shirt, Moon, Layers, Heart, Wifi
 } from "lucide-react";
 import { motion } from "motion/react";
 import { SEO } from "../components/SEO";
 import { StorefrontFacade } from "../components/StorefrontFacade";
+import { db } from "../lib/firebase";
+import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 
-const BANNERS = [
+const DEFAULT_BANNERS = [
   "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&q=80",
   "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=800&q=80",
   "https://images.unsplash.com/photo-1470309864661-68328b2cd0a5?w=800&q=80"
@@ -53,13 +55,30 @@ const MARKET_CATEGORIES = [
 export const Home: React.FC = () => {
   const navigate = useNavigate();
   const [activeBanner, setActiveBanner] = React.useState(0);
+  const [banners, setBanners] = React.useState<string[]>(DEFAULT_BANNERS);
 
   React.useEffect(() => {
+    const q = query(collection(db, "main_banners"), orderBy("order", "asc"));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => doc.data().image).filter(Boolean);
+      if (data.length > 0) {
+        setBanners(data);
+      } else {
+        setBanners(DEFAULT_BANNERS);
+      }
+    }, (error) => {
+      console.warn("Main banner fetch notice:", error);
+    });
+    return () => unsub();
+  }, []);
+
+  React.useEffect(() => {
+    if (banners.length === 0) return;
     const timer = setInterval(() => {
-      setActiveBanner(prev => (prev + 1) % BANNERS.length);
+      setActiveBanner(prev => (prev + 1) % banners.length);
     }, 4000);
     return () => clearInterval(timer);
-  }, []);
+  }, [banners.length]);
 
   return (
     <div className="min-h-screen bg-[#f1f3f4] text-black flex flex-col font-sans select-none pb-20">
@@ -75,7 +94,7 @@ export const Home: React.FC = () => {
         {/* 2. Banner Slider */}
         <div className="px-4 mt-4">
           <div className="relative aspect-[21/9] rounded-2xl overflow-hidden shadow-sm group">
-            {BANNERS.map((banner, idx) => (
+            {banners.map((banner, idx) => (
               <motion.img
                 key={idx}
                 src={banner}
@@ -90,7 +109,7 @@ export const Home: React.FC = () => {
             
             {/* Dots */}
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-              {BANNERS.map((_, idx) => (
+              {banners.map((_, idx) => (
                 <div 
                   key={idx}
                   className={`h-1.5 rounded-full transition-all duration-300 ${activeBanner === idx ? "w-6 bg-[#ffb703]" : "w-1.5 bg-white/50"}`}
@@ -192,7 +211,7 @@ export const Home: React.FC = () => {
           <motion.div 
             whileTap={{ scale: 0.98 }}
             onClick={() => navigate('/pixel-editing-tools')}
-            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md group cursor-pointer"
+            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md mb-2 sm:mb-2.5 group cursor-pointer"
           >
             <div className="relative z-10 flex items-center justify-between gap-2.5">
               <div className="flex-1 min-w-0">
@@ -215,6 +234,66 @@ export const Home: React.FC = () => {
             {/* Background elements */}
             <div className="absolute top-1/2 -translate-y-1/2 -right-2 opacity-[0.08] pointer-events-none">
               <Layers className="w-16 h-16 sm:w-20 sm:h-20 stroke-[1]" />
+            </div>
+          </motion.div>
+
+          {/* Matrimonial & Biodata Banner (Islamic Matrimonial) */}
+          <motion.div 
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate('/matrimonial')}
+            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-r from-[#881337] via-[#9f1239] to-[#701a75] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md group cursor-pointer"
+          >
+            <div className="relative z-10 flex items-center justify-between gap-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="bg-rose-200 text-rose-950 text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight inline-block mb-1">
+                  ইসলামী সেবা
+                </div>
+                <h2 className="text-[13px] sm:text-[15px] font-bold mb-0.5 truncate leading-tight flex items-center gap-1.5">
+                  <span>💍 বিবাহের বায়োডাটা (Islamic Matrimonial)</span>
+                </h2>
+                <p className="text-[10px] sm:text-[11px] text-rose-100 truncate leading-normal">
+                  শারীয়াহ সম্মত ও সম্পূর্ণ প্রাইভেসি বজায় রেখে দ্বীনি পাত্র/পাত্রীর খোঁজ
+                </p>
+              </div>
+              
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/15 border border-white/20 flex items-center justify-center backdrop-blur-md shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
+                <ChevronRight className="w-3.5 h-3.5 text-white stroke-[1.5]" />
+              </div>
+            </div>
+            
+            {/* Background elements */}
+            <div className="absolute top-1/2 -translate-y-1/2 -right-2 opacity-[0.12] pointer-events-none text-rose-200">
+              <Heart className="w-16 h-16 sm:w-20 sm:h-20 stroke-[1] fill-rose-200" />
+            </div>
+          </motion.div>
+
+          {/* Telecom Service Banner */}
+          <motion.div 
+            whileTap={{ scale: 0.98 }}
+            onClick={() => navigate('/telecom')}
+            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-r from-[#002A1A] via-[#044a2f] to-[#012014] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md mt-2.5 group cursor-pointer"
+          >
+            <div className="relative z-10 flex items-center justify-between gap-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="bg-[#ffb703] text-black text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tight inline-block mb-1">
+                  টেলিকম অফার
+                </div>
+                <h2 className="text-[13px] sm:text-[15px] font-bold mb-0.5 truncate leading-tight flex items-center gap-1.5">
+                  <span>📶 ইন্টারনেট প্যাক ক্রয় করুন (Telecom Service)</span>
+                </h2>
+                <p className="text-[10px] sm:text-[11px] text-emerald-100 truncate leading-normal">
+                  জিপি, রবি, বাংলালিংক ও টেলিটক অফার কিনুন সহজে ও নিরাপদে
+                </p>
+              </div>
+              
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/15 border border-white/20 flex items-center justify-center backdrop-blur-md shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
+                <ChevronRight className="w-3.5 h-3.5 text-white stroke-[1.5]" />
+              </div>
+            </div>
+            
+            {/* Background elements */}
+            <div className="absolute top-1/2 -translate-y-1/2 -right-2 opacity-[0.12] pointer-events-none text-emerald-200">
+              <Wifi className="w-16 h-16 sm:w-20 sm:h-20 stroke-[1]" />
             </div>
           </motion.div>
         </div>

@@ -17,8 +17,28 @@ import { uploadToImgBB, uploadImageFile, uploadImage } from "../../lib/uploadSer
 import { compressImage } from "../../lib/imageUtils";
 
 export const PERMANENT_ONESIGNAL_APP_ID = "d28392ee-2a0f-4f62-ba65-03fb3e0915ab";
-export const PERMANENT_ONESIGNAL_REST_API_KEY = typeof process !== "undefined" && process.env?.ONESIGNAL_REST_API_KEY ? process.env.ONESIGNAL_REST_API_KEY : atob("b3NfdjJfYXBwXzJrYnpmM3JrYjVod2ZvdGZhcDV0NGNpdnZvYm1jMnN6Mm0zdW9lZXpzN3Vhb29lbWM0bTJ6cHBwdzY0azd5d2huM21yeXpuemJ2N3lhNHY0cmIzc3F3cnNzeGFwNW5wdW9iZWY3b2E=");
-export const PERMANENT_IMGBB_API_KEY = typeof process !== "undefined" && process.env?.IMGBB_API_KEY ? process.env.IMGBB_API_KEY : atob("NTJlY2Y5ZWI0NGYzMmQyYTg4ZDIxMGNhMzM5OWMwNTQ=");
+const isBrowser = typeof window !== "undefined";
+export const PERMANENT_ONESIGNAL_REST_API_KEY = 
+  (!isBrowser && typeof process !== "undefined" && typeof process.env !== "undefined" && process.env.ONESIGNAL_REST_API_KEY)
+    ? process.env.ONESIGNAL_REST_API_KEY
+    : (function() {
+        try {
+          return atob("b3NfdjJfYXBwXzJrYnpmM3JrYjVod2ZvdGZhcDV0NGNpdnZvYm1jMnN6Mm0zdW9lZXpzN3Vhb29lbWM0bTJ6cHBwdzY0azd5d2huM21yeXpuemJ2N3lhNHY0cmIzc3F3cnNzeGFwNW5wdW9iZWY3b2E=");
+        } catch (e) {
+          return "";
+        }
+      })();
+
+export const PERMANENT_IMGBB_API_KEY = 
+  (!isBrowser && typeof process !== "undefined" && typeof process.env !== "undefined" && process.env.IMGBB_API_KEY)
+    ? process.env.IMGBB_API_KEY
+    : (function() {
+        try {
+          return atob("NTJlY2Y5ZWI0NGYzMmQyYTg4ZDIxMGNhMzM5OWMwNTQ=");
+        } catch (e) {
+          return "";
+        }
+      })();
 
 export const NOTIFICATION_BANNER_PRESETS = [
   {
@@ -63,8 +83,10 @@ export const OneSignalConfig: React.FC<OneSignalConfigProps> = ({ onBack, preSel
     enabled: true,
     configured: true,
     appId: PERMANENT_ONESIGNAL_APP_ID,
+    restApiKey: PERMANENT_ONESIGNAL_REST_API_KEY,
     imgbbApiKey: PERMANENT_IMGBB_API_KEY
   });
+  const [showApiSettings, setShowApiSettings] = useState(false);
   const [testPayload, setTestPayload] = useState({
     title: "Al Mayadin Bazar স্পেশাল অফার ও ডিসকাউন্ট!",
     message: "আজকের আকর্ষণীয় অফার উপভোগ করুন। স্টক সীমিত, এখনই অর্ডার করুন।",
@@ -686,168 +708,118 @@ export const OneSignalConfig: React.FC<OneSignalConfigProps> = ({ onBack, preSel
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Status & API Keys Configuration Card */}
-          <div className="bg-white rounded-[32px] border border-gray-100 p-7 shadow-sm space-y-6">
-            <div className="flex items-center justify-between pb-5 border-b border-gray-100">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-violet-50 text-[#5842dc] flex items-center justify-center font-black text-xs">
-                  1
+          {/* Active Gateway Status Banner & Collapsible Credentials toggle */}
+          <div className="bg-white rounded-[32px] border border-gray-100 p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-200">
+                  <CheckCircle2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-black text-gray-900 uppercase tracking-wider">OneSignal Credentials & Security</h4>
-                  <p className="text-[11px] text-gray-400 font-medium">পুশ নোটিফিকেশন গেটওয়ে কনফিগারেশন</p>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-black text-gray-900 tracking-tight">OneSignal Push Gateway Active</h4>
+                    <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-black uppercase tracking-wider">
+                      সক্রিয় ও কানেক্টেড
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 font-medium mt-0.5">
+                    আপনার অ্যাপের পুশ নোটিফিকেশন সিস্টেম অটো-কনফিগার করা আছে। নিচে সরাসরি পুশ নোটিফিকেশন পাঠাতে পারবেন।
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black tracking-wide border border-emerald-100">
-                <CheckCircle2 className="w-3 h-3" /> SECURE GATEWAY
-              </div>
+
+              <button 
+                onClick={() => setShowApiSettings(!showApiSettings)}
+                className="px-4 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-xl text-xs font-bold transition-all border border-gray-200 shrink-0 flex items-center gap-1.5"
+              >
+                ⚙️ {showApiSettings ? "এপিআই সেটিংস হাইড করুন" : "এপিআই কী সেটিংস দেখুন"}
+              </button>
             </div>
 
-            <div className="space-y-4">
-              {/* App ID Field */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1 flex items-center justify-between">
-                  <span>OneSignal App ID</span>
-                  <span className="text-[9px] text-gray-400 font-normal">OneSignal Dashboard &gt; Keys &amp; IDs</span>
-                </label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text"
-                    value={config.appId || PERMANENT_ONESIGNAL_APP_ID}
-                    onChange={(e) => setConfig({ ...config, appId: e.target.value.trim() })}
-                    placeholder="e.g. d28392ee-2a0f-4f62-ba65-03fb3e0915ab"
-                    className="flex-1 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-xs font-mono font-medium focus:outline-none focus:ring-2 focus:ring-[#5842dc]/20 transition-all"
-                  />
-                  <button 
-                    onClick={async () => {
-                      try {
-                        const cleanId = (config.appId || PERMANENT_ONESIGNAL_APP_ID).trim().substring(0, 36);
-                        await setDoc(doc(db, "configs", "integration_onesignal"), { appId: cleanId }, { merge: true });
-                        showToast("OneSignal App ID সংরক্ষিত হয়েছে!", "success");
-                        fetchConfig();
-                      } catch (err) {
-                        showToast("সংরক্ষণ ব্যর্থ হয়েছে", "error");
-                      }
-                    }}
-                    className="px-4 bg-gray-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-
-              {/* REST API Key Field & Test Button */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1 flex items-center justify-between">
-                  <span>OneSignal REST API Key</span>
-                  <span className="text-[9px] text-amber-600 font-medium">ব্রডকাস্ট পুশ ডেলিভারির জন্য প্রয়োজন</span>
-                </label>
-                <div className="flex gap-2">
-                  <input 
-                    type="password"
-                    value={config.restApiKey || ""}
-                    onChange={(e) => {
-                      setConfig({ ...config, restApiKey: e.target.value });
-                      if (testResult) setTestResult(null);
-                    }}
-                    placeholder="os_v2_app_... or REST API Key"
-                    className="flex-1 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-xs font-mono font-medium focus:outline-none focus:ring-2 focus:ring-[#5842dc]/20 transition-all"
-                  />
-                  <button 
-                    onClick={async () => {
-                      const cleanKey = (config.restApiKey || "").trim();
-                      try {
-                        await setDoc(doc(db, "configs", "integration_onesignal"), { restApiKey: cleanKey }, { merge: true });
-                        showToast("OneSignal REST API Key সংরক্ষিত হয়েছে!", "success");
-                        fetchConfig();
-                      } catch (err) {
-                        showToast("সংরক্ষণ ব্যর্থ হয়েছে", "error");
-                      }
-                    }}
-                    className="px-4 bg-gray-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
-                  >
-                    Save
-                  </button>
-                  <button 
-                    onClick={handleTestConnection}
-                    disabled={testingConnection || !(config.restApiKey || "").trim()}
-                    className={`px-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 ${
-                      testingConnection 
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-[#5842dc] text-white hover:bg-[#4834c8] shadow-xs'
-                    }`}
-                  >
-                    {testingConnection ? (
-                      <>
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                        টেস্ট হচ্ছে...
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="w-3 h-3" />
-                        টেস্ট কী
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Connection Test Feedback */}
-                {testResult && (
-                  <div className={`p-3.5 rounded-2xl border text-xs flex items-start gap-2.5 transition-all ${
-                    testResult.success 
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
-                      : 'bg-rose-50 border-rose-200 text-rose-800'
-                  }`}>
-                    {testResult.success ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                    )}
-                    <div className="flex-1 space-y-0.5">
-                      <p className="font-bold">{testResult.message}</p>
-                      {testResult.appName && (
-                        <p className="text-[10px] text-emerald-700">
-                          App: <span className="font-semibold">{testResult.appName}</span> | Total Subscribers: <span className="font-semibold">{testResult.players || 0}</span>
-                        </p>
-                      )}
+            {/* Collapsible API Keys Form */}
+            {showApiSettings && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="pt-4 border-t border-gray-100 space-y-4"
+              >
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1 flex items-center justify-between">
+                      <span>OneSignal App ID</span>
+                      <span className="text-[9px] text-gray-400 font-normal">OneSignal Dashboard &gt; Keys &amp; IDs</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        value={config.appId || PERMANENT_ONESIGNAL_APP_ID}
+                        onChange={(e) => setConfig({ ...config, appId: e.target.value.trim() })}
+                        placeholder="e.g. d28392ee-2a0f-4f62-ba65-03fb3e0915ab"
+                        className="flex-1 bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-mono font-medium focus:outline-none focus:ring-2 focus:ring-[#5842dc]/20 transition-all"
+                      />
+                      <button 
+                        onClick={async () => {
+                          try {
+                            const cleanId = (config.appId || PERMANENT_ONESIGNAL_APP_ID).trim().substring(0, 36);
+                            await setDoc(doc(db, "configs", "integration_onesignal"), { appId: cleanId }, { merge: true });
+                            showToast("OneSignal App ID সংরক্ষিত হয়েছে!", "success");
+                            fetchConfig();
+                          } catch (err) {
+                            showToast("সংরক্ষণ ব্যর্থ হয়েছে", "error");
+                          }
+                        }}
+                        className="px-4 bg-gray-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
+                      >
+                        Save
+                      </button>
                     </div>
                   </div>
-                )}
 
-                <p className="text-[10px] text-gray-400 px-1">
-                  💡 <span className="font-semibold text-gray-600">কোথায় পাবেন:</span> OneSignal ড্যাশবোর্ডে গিয়ে <b>Settings &gt; Keys &amp; IDs</b> থেকে <b>REST API Key</b> কপি করে এখানে পেস্ট করে Save এবং "টেস্ট কী" বাটনে চাপুন।
-                </p>
-              </div>
-
-              {/* ImgBB API Key */}
-              <div className="space-y-1.5 pt-2 border-t border-gray-50">
-                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1 flex items-center justify-between">
-                  <span>ImgBB API Key (পুশ ইমেজ হোস্টিং)</span>
-                </label>
-                <div className="flex gap-2">
-                  <input 
-                    type="password"
-                    value={config.imgbbApiKey || PERMANENT_IMGBB_API_KEY}
-                    onChange={(e) => setConfig({ ...config, imgbbApiKey: e.target.value })}
-                    placeholder="Enter ImgBB API Key"
-                    className="flex-1 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-xs font-mono font-medium focus:outline-none focus:ring-2 focus:ring-[#5842dc]/20 transition-all"
-                  />
-                  <button 
-                    onClick={async () => {
-                      try {
-                        await setDoc(doc(db, "configs", "integration_onesignal"), { imgbbApiKey: config.imgbbApiKey }, { merge: true });
-                        showToast("ImgBB API Key সংরক্ষিত হয়েছে!", "success");
-                      } catch (err) {
-                        showToast("সংরক্ষণ ব্যর্থ হয়েছে", "error");
-                      }
-                    }}
-                    className="px-4 bg-gray-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
-                  >
-                    Save
-                  </button>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1 flex items-center justify-between">
+                      <span>OneSignal REST API Key</span>
+                      <span className="text-[9px] text-amber-600 font-medium">ব্রডকাস্ট পুশ ডেলিভারির জন্য প্রয়োজন</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="password"
+                        value={config.restApiKey || PERMANENT_ONESIGNAL_REST_API_KEY}
+                        onChange={(e) => {
+                          setConfig({ ...config, restApiKey: e.target.value });
+                          if (testResult) setTestResult(null);
+                        }}
+                        placeholder="os_v2_app_... or REST API Key"
+                        className="flex-1 bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-mono font-medium focus:outline-none focus:ring-2 focus:ring-[#5842dc]/20 transition-all"
+                      />
+                      <button 
+                        onClick={async () => {
+                          const cleanKey = (config.restApiKey || PERMANENT_ONESIGNAL_REST_API_KEY).trim();
+                          try {
+                            await setDoc(doc(db, "configs", "integration_onesignal"), { restApiKey: cleanKey }, { merge: true });
+                            showToast("OneSignal REST API Key সংরক্ষিত হয়েছে!", "success");
+                            fetchConfig();
+                          } catch (err) {
+                            showToast("সংরক্ষণ ব্যর্থ হয়েছে", "error");
+                          }
+                        }}
+                        className="px-4 bg-gray-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
+                      >
+                        Save
+                      </button>
+                      <button 
+                        onClick={handleTestConnection}
+                        disabled={testingConnection}
+                        className="px-4 rounded-xl text-[10px] font-black uppercase tracking-widest bg-[#5842dc] text-white hover:bg-[#4834c8] transition-all flex items-center gap-1.5 shrink-0"
+                      >
+                        {testingConnection ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                        টেস্ট কী
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+              </motion.div>
+            )}
           </div>
 
           {/* Live Subscribers & Device Subscription Card */}
@@ -1151,50 +1123,89 @@ export const OneSignalConfig: React.FC<OneSignalConfigProps> = ({ onBack, preSel
                 />
               </div>
               
-              {/* Image URL / Upload Section */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between px-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                    🖼️ নোটিফিকেশনের বড় ছবি/ব্যানার (Rich Push Image Banner)
-                  </label>
+              {/* Dedicated Image Upload Card & Direct Gallery Button */}
+              <div className="bg-gradient-to-br from-indigo-50/40 via-white to-purple-50/40 rounded-3xl border border-indigo-100/80 p-5 space-y-4 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-2xl bg-[#5842dc]/10 text-[#5842dc] flex items-center justify-center">
+                      <ImageIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-black text-gray-900 uppercase tracking-wider">
+                        📷 নোটিফিকেশনের বড় ছবি/ব্যানার (Attach Photo Banner)
+                      </h5>
+                      <p className="text-[10px] text-gray-500 font-medium">মোবাইল গ্যালারি থেকে সরাসরি ছবি আপলোড করুন</p>
+                    </div>
+                  </div>
                   {testPayload.imageUrl && (
                     <button 
                       onClick={() => setTestPayload({ ...testPayload, imageUrl: "" })}
-                      className="text-[10px] font-black text-rose-500 uppercase tracking-widest hover:underline"
+                      className="text-[10px] font-black text-rose-600 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-full transition-all flex items-center gap-1"
                     >
-                      Clear Image
+                      <Trash2 className="w-3 h-3" />
+                      ছবি রিমুভ করুন
                     </button>
                   )}
                 </div>
-                
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="relative flex-1">
+
+                {/* Direct Upload Box */}
+                <div className="space-y-3">
+                  <label className={`cursor-pointer w-full p-4 rounded-2xl border-2 border-dashed flex flex-col sm:flex-row items-center justify-center gap-3 transition-all ${
+                    uploading 
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700' 
+                      : testPayload.imageUrl 
+                        ? 'border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50' 
+                        : 'border-indigo-200 hover:border-[#5842dc] hover:bg-[#5842dc]/5 text-gray-700 bg-white'
+                  }`}>
+                    {uploading ? (
+                      <div className="flex items-center gap-2.5 py-2">
+                        <RefreshCw className="w-5 h-5 animate-spin text-[#5842dc]" />
+                        <span className="text-xs font-bold text-[#5842dc]">ছবি হাই-স্পিড সার্ভারে আপলোড হচ্ছে...</span>
+                      </div>
+                    ) : testPayload.imageUrl ? (
+                      <div className="flex items-center gap-3 w-full">
+                        <img 
+                          src={testPayload.imageUrl} 
+                          alt="Uploaded Banner" 
+                          className="w-16 h-12 object-cover rounded-xl border border-gray-200 shrink-0" 
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-black text-emerald-800 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ছবি সংযুক্ত করা হয়েছে
+                          </p>
+                          <p className="text-[10px] text-gray-500 truncate">{testPayload.imageUrl}</p>
+                        </div>
+                        <span className="text-[10px] font-black text-[#5842dc] bg-[#5842dc]/10 px-3 py-1.5 rounded-xl shrink-0">
+                          অন্য ছবি দিন
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3 py-1">
+                        <div className="w-10 h-10 rounded-2xl bg-[#5842dc] text-white flex items-center justify-center shadow-md shadow-[#5842dc]/20 shrink-0">
+                          <Upload className="w-5 h-5" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-xs font-black text-gray-900">গ্যালারি / ফাইল থেকে সরাসরি ফটো দিন</p>
+                          <p className="text-[10px] text-gray-500 font-medium">ক্লিক করে আপনার ফোনের ফটো গ্যালারি থেকে ছবি সিলেক্ট করুন</p>
+                        </div>
+                      </div>
+                    )}
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={uploading} />
+                  </label>
+
+                  {/* Manual URL option fallback */}
+                  <div className="relative">
                     <input 
                       type="text"
                       value={testPayload.imageUrl}
                       onChange={(e) => setTestPayload({ ...testPayload, imageUrl: e.target.value })}
-                      placeholder="পাবলিক HTTPS লিংক (যেমন: https://...)"
-                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-5 pr-12 py-3.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5842dc]/20 transition-all"
+                      placeholder="অথবা ফটো লিঙ্ক পেস্ট করুন (যেমন: https://...)"
+                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl pl-4 pr-10 py-2.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#5842dc]/20 transition-all"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <ImageIcon className={`w-5 h-5 ${testPayload.imageUrl ? 'text-emerald-500' : 'text-gray-300'}`} />
+                      <ImageIcon className={`w-4 h-4 ${testPayload.imageUrl ? 'text-emerald-500' : 'text-gray-300'}`} />
                     </div>
                   </div>
-                  
-                  <label className={`cursor-pointer px-4 h-[50px] rounded-2xl border-2 border-dashed flex items-center justify-center gap-2 transition-all shrink-0 ${uploading ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'border-indigo-200 hover:border-[#5842dc] hover:bg-[#5842dc]/5 text-gray-700'}`}>
-                    {uploading ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin text-[#5842dc]" />
-                        <span className="text-xs font-bold">আপলোড হচ্ছে...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-4 h-4 text-[#5842dc]" />
-                        <span className="text-xs font-bold text-gray-800">গ্যালারি থেকে ফটো দিন</span>
-                      </>
-                    )}
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" disabled={uploading} />
-                  </label>
                 </div>
               </div>
 

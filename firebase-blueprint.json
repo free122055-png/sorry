@@ -189,6 +189,14 @@
     "video_tilawat/{videoId}": {
       "schema": "VideoTilawat",
       "description": "Video Tilawat recitations and links"
+    },
+    "biodatas/{biodataId}": {
+      "schema": "Biodata",
+      "description": "Matrimonial Shariah Marriage Biodatas"
+    },
+    "biodata_requests/{requestId}": {
+      "schema": "BiodataRequest",
+      "description": "Requests for guardian contact numbers"
     }
   }
 }

@@ -6,7 +6,17 @@ import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { uploadImage } from './uploadService';
 
 export const PERMANENT_ONESIGNAL_APP_ID = "d28392ee-2a0f-4f62-ba65-03fb3e0915ab";
-export const PERMANENT_ONESIGNAL_REST_API_KEY = typeof process !== "undefined" && process.env?.ONESIGNAL_REST_API_KEY ? process.env.ONESIGNAL_REST_API_KEY : atob("b3NfdjJfYXBwXzJrYnpmM3JrYjVod2ZvdGZhcDV0NGNpdnZvYm1jMnN6Mm0zdW9lZXpzN3Vhb29lbWM0bTJ6cHBwdzY0azd5d2huM21yeXpuemJ2N3lhNHY0cmIzc3F3cnNzeGFwNW5wdW9iZWY3b2E=");
+const isBrowser = typeof window !== "undefined";
+export const PERMANENT_ONESIGNAL_REST_API_KEY = 
+  (!isBrowser && typeof process !== "undefined" && typeof process.env !== "undefined" && process.env.ONESIGNAL_REST_API_KEY)
+    ? process.env.ONESIGNAL_REST_API_KEY
+    : (function() {
+        try {
+          return atob("b3NfdjJfYXBwXzJrYnpmM3JrYjVod2ZvdGZhcDV0NGNpdnZvYm1jMnN6Mm0zdW9lZXpzN3Vhb29lbWM0bTJ6cHBwdzY0azd5d2huM21yeXpuemJ2N3lhNHY0cmIzc3F3cnNzeGFwNW5wdW9iZWY3b2E=");
+        } catch (e) {
+          return "";
+        }
+      })();
 
 class NotificationService {
   private static instance: NotificationService;
@@ -140,7 +150,31 @@ class NotificationService {
    */
   public async requestPermission(): Promise<boolean> {
     try {
-      // 1. Direct browser Notification API check
+      // 1. Native OneSignal Permission Request support for Capacitor/Cordova APK
+      if (typeof window !== "undefined" && (window as any).plugins?.OneSignal) {
+        try {
+          const nativeOS = (window as any).plugins.OneSignal;
+          if (nativeOS.Notifications?.requestPermission) {
+            await new Promise((resolve) => {
+              nativeOS.Notifications.requestPermission(true, (result: any) => {
+                resolve(result);
+              });
+            });
+            return true;
+          } else if (nativeOS.promptForPushNotificationsWithUserResponse) {
+            await new Promise((resolve) => {
+              nativeOS.promptForPushNotificationsWithUserResponse((accepted: any) => {
+                resolve(accepted);
+              });
+            });
+            return true;
+          }
+        } catch (e) {
+          console.warn("Native OneSignal permission request warning:", e);
+        }
+      }
+
+      // 2. Direct browser Notification API check
       if (typeof window !== "undefined" && "Notification" in window) {
         if (Notification.permission === "granted") {
           this.triggerLocalTestNotification("আল-All MAYADIN FASHION", "আপনার ডিভাইসে নোটিফিকেশন সক্রিয় আছে।");
@@ -457,8 +491,11 @@ class NotificationService {
 
     if (targetUserIds && targetUserIds.length > 0) {
       payload.include_external_user_ids = targetUserIds;
+      payload.include_aliases = {
+        external_id: targetUserIds
+      };
     } else {
-      payload.included_segments = ["Total Subscriptions", "Subscribed Users"];
+      payload.included_segments = ["Total Subscriptions", "Subscribed Users", "All"];
     }
 
     const authHeader = activeRestApiKey.startsWith("os_v2_") ? `Key ${activeRestApiKey}` : `Basic ${activeRestApiKey}`;

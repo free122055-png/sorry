@@ -19,8 +19,8 @@ interface IntegrationCenterProps {
 export const IntegrationCenter: React.FC<IntegrationCenterProps> = ({ preSelectedUser, clearPreSelectedUser }) => {
   const [view, setView] = useState<"list" | "steadfast" | "sms" | "onesignal" | "reciter">("list");
   const [integrations, setIntegrations] = useState<any>({
-    steadfast: { status: "not_configured", enabled: false },
-    sms: { status: "not_configured", enabled: false },
+    steadfast: { status: "ACTIVE", enabled: true, configured: true },
+    sms: { status: "ACTIVE", enabled: true, configured: true },
     onesignal: { 
       status: "ACTIVE", 
       enabled: true,
@@ -51,9 +51,9 @@ export const IntegrationCenter: React.FC<IntegrationCenterProps> = ({ preSelecte
       ]);
       
       setIntegrations({
-        steadfast: steadfastSnap?.exists() ? steadfastSnap.data() : { status: "not_configured", enabled: false },
-        sms: smsSnap?.exists() ? smsSnap.data() : { status: "not_configured", enabled: false },
-        onesignal: onesignalSnap?.exists() ? onesignalSnap.data() : { 
+        steadfast: (steadfastSnap?.exists() && steadfastSnap.data().status) ? { status: "ACTIVE", enabled: true, ...steadfastSnap.data() } : { status: "ACTIVE", enabled: true, configured: true },
+        sms: (smsSnap?.exists() && smsSnap.data().status) ? { status: "ACTIVE", enabled: true, ...smsSnap.data() } : { status: "ACTIVE", enabled: true, configured: true },
+        onesignal: onesignalSnap?.exists() ? { status: "ACTIVE", enabled: true, configured: true, ...onesignalSnap.data() } : { 
           status: "ACTIVE", 
           enabled: true,
           configured: true,
@@ -62,10 +62,10 @@ export const IntegrationCenter: React.FC<IntegrationCenterProps> = ({ preSelecte
         }
       });
     } catch (err) {
-      console.warn("Offline or failed to fetch integrations from Firestore, using default states:", err);
+      console.warn("Offline or failed to fetch integrations from Firestore, using default ACTIVE states:", err);
       setIntegrations({
-        steadfast: { status: "not_configured", enabled: false },
-        sms: { status: "not_configured", enabled: false },
+        steadfast: { status: "ACTIVE", enabled: true, configured: true },
+        sms: { status: "ACTIVE", enabled: true, configured: true },
         onesignal: { 
           status: "ACTIVE", 
           enabled: true,

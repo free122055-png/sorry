@@ -243,6 +243,20 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                     <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-pink-700 group-hover:translate-x-0.5 transition-all" />
                   </button>
 
+                  {/* বিবাহের বায়োডাটা */}
+                  <button
+                    onClick={() => handleNavigate("/matrimonial")}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-50/50 text-gray-800 font-bold transition-colors text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <BookOpen className="w-4 h-4 stroke-[2.2]" />
+                      </div>
+                      <span className="group-hover:text-rose-700 transition-colors">💍 বিবাহের বায়োডাটা</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-rose-700 group-hover:translate-x-0.5 transition-all" />
+                  </button>
+
                   {/* কার্ট */}
                   <button
                     onClick={() => handleNavigate("/cart")}

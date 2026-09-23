@@ -8,7 +8,11 @@ import {
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
   updateProfile,
-  deleteUser
+  deleteUser,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult
 } from "firebase/auth";
 import { auth, db } from "../lib/firebase";
 import { getApiUrl } from "../lib/api";
@@ -259,6 +263,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     closeAuthModal();
     return userCredential.user;
+  };
+
+  const loginWithGoogle = async (): Promise<User> => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    try {
+      const result = await signInWithPopup(auth, provider);
+      setUser(result.user);
+      await fetchProfile(result.user);
+      closeAuthModal();
+      return result.user;
+    } catch (popupErr: any) {
+      console.warn("Popup sign-in notice, falling back to redirect:", popupErr);
+      await signInWithRedirect(auth, provider);
+      const redirectResult = await getRedirectResult(auth);
+      if (redirectResult && redirectResult.user) {
+        setUser(redirectResult.user);
+        await fetchProfile(redirectResult.user);
+        closeAuthModal();
+        return redirectResult.user;
+      }
+      throw popupErr;
+    }
   };
 
   const registerWithEmail = async (data: RegisterData): Promise<User> => {
@@ -627,6 +654,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateUserEmail,
         skipEmailPrompt,
         deleteUserAccount,
+        loginWithGoogle,
       }}
     >
       {children}

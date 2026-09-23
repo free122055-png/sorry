@@ -75,6 +75,9 @@ const AccountSettings = safeLazy(() => import("./pages/AccountSettings"), "Accou
 const DownloadCert = safeLazy(() => import("./pages/DownloadCert"));
 const PixelEditingTools = safeLazy(() => import("./pages/PixelEditingTools"), "PixelEditingTools");
 const CaptionGhorPage = safeLazy(() => import("./pages/CaptionGhorPage"), "CaptionGhorPage");
+const MatrimonialPage = safeLazy(() => import("./pages/MatrimonialPage"), "MatrimonialPage");
+const TelecomPage = safeLazy(() => import("./pages/TelecomPage"), "TelecomPage");
+const StandaloneAdmin = safeLazy(() => import("./pages/StandaloneAdmin"), "StandaloneAdmin");
 
 const LoadingFallback = () => (
   <div className="min-h-[40vh] flex flex-col items-center justify-center p-4">
@@ -155,15 +158,18 @@ function AppLayout() {
   const isPixelEditor = location.pathname === "/pixel-editing-tools" || 
                         location.pathname === "/pixel-tools" || 
                         location.pathname === "/pixel";
+  const isStandaloneAdmin = location.pathname.startsWith("/standalone-admin") || 
+                            location.pathname.startsWith("/admin-portal");
+  const isLogin = location.pathname === "/login" || location.pathname === "/register";
 
   return (
     <div className={`w-full min-h-screen overflow-x-hidden overflow-y-auto ${
-      isTilawat || isPixelEditor ? "bg-[#030d17] pb-0" : "bg-[#f8f9fa] pb-24 md:pb-0"
+      isTilawat || isPixelEditor || isStandaloneAdmin || isLogin ? "bg-[#002A1A] pb-0" : "bg-[#f8f9fa] pb-24 md:pb-0"
     }`}>
       <SplashScreen />
       <EmailPromptHandler />
-      {!isPixelEditor && <Header />}
-      <main className={isTilawat || isPixelEditor ? "w-full" : "max-w-7xl mx-auto w-full"}>
+      {!isPixelEditor && !isStandaloneAdmin && !isLogin && <Header />}
+      <main className={isTilawat || isPixelEditor || isStandaloneAdmin || isLogin ? "w-full min-h-screen" : "max-w-7xl mx-auto w-full"}>
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -216,12 +222,21 @@ function AppLayout() {
             <Route path="/pixel-tools" element={<PixelEditingTools />} />
             <Route path="/pixel" element={<PixelEditingTools />} />
             
+            <Route path="/matrimonial" element={<MatrimonialPage />} />
+            <Route path="/biodata" element={<MatrimonialPage />} />
+            <Route path="/marriage" element={<MatrimonialPage />} />
+
+            <Route path="/telecom" element={<TelecomPage />} />
+            <Route path="/telecom-service" element={<TelecomPage />} />
+            
             <Route path="/security" element={<Legal />} />
             
             <Route path="/admin" element={<ProtectedRoute adminOnly><Admin /></ProtectedRoute>} />
             <Route path="/super-admin" element={<ProtectedRoute adminOnly><SuperAdmin /></ProtectedRoute>} />
             <Route path="/admin/home" element={<ProtectedRoute adminOnly><AdminHome /></ProtectedRoute>} />
             <Route path="/admin/category/:categoryId" element={<ProtectedRoute adminOnly><AdminProductListing /></ProtectedRoute>} />
+            <Route path="/standalone-admin" element={<StandaloneAdmin />} />
+            <Route path="/admin-portal" element={<StandaloneAdmin />} />
             
             <Route path="/search" element={<Categories />} />
             <Route path="/islamic-tilawat" element={<IslamicTilawat />} />
@@ -232,8 +247,8 @@ function AppLayout() {
           </Routes>
         </Suspense>
       </main>
-      {!isPixelEditor && <BottomNav />}
-      {!isPixelEditor && <FloatingOrderBubble />}
+      {!isPixelEditor && !isStandaloneAdmin && !isLogin && <BottomNav />}
+      {!isPixelEditor && !isStandaloneAdmin && !isLogin && <FloatingOrderBubble />}
       <DeepLinkHandler />
       <AuthModal />
     </div>

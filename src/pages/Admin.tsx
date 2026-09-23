@@ -4,7 +4,7 @@ import {
   ArrowLeft, Menu, Save, Upload, X, Plus, Tag, CheckCircle2, 
   AlertCircle, Percent, Image as ImageIcon, PackagePlus, 
   Package, Truck, ClipboardList, LayoutDashboard, Settings,
-  LayoutGrid, Users, Download, KeyRound, Copy, Home as HomeIcon, Bell, Mail, Eye, Radio, Mic, Video, Layout, Type, Sparkles
+  LayoutGrid, Users, Download, KeyRound, Copy, Home as HomeIcon, Bell, Mail, Eye, Radio, Mic, Video, Layout, Type, Sparkles, Heart, Wifi
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../lib/firebase";
@@ -29,6 +29,8 @@ import { UserManagement } from "../components/admin/UserManagement";
 import { OneSignalConfig } from "../components/admin/OneSignalConfig";
 import { EmailAutomationSection } from "../components/admin/EmailAutomationSection";
 import { FloatingBubbleAdminSettings } from "../components/admin/FloatingBubbleAdminSettings";
+import { BiodataManagement } from "../components/admin/BiodataManagement";
+import { TelecomManagement } from "../components/admin/TelecomManagement";
 import { useFirestoreCategories } from "../hooks/useCategories";
 import { CustomDropdown } from "../components/CustomDropdown";
 
@@ -58,7 +60,7 @@ OVKwXvSuAXa961yvmxhloAvVNj3PHewurSsi+j//+6+EtA9G5LJmj+1BBhxglwOk
 export const Admin: React.FC = () => {
   // Navigation Menu State
   const [activeMenu, setActiveMenu] = useState<
-    "all-products" | "add-product" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management" | "caption-management"
+    "all-products" | "add-product" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management" | "caption-management" | "matrimonial-management" | "telecom-management"
   >("all-products");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedUserForNotification, setSelectedUserForNotification] = useState<any>(null);
@@ -508,6 +510,24 @@ export const Admin: React.FC = () => {
                   }}
                 />
                 <MenuButton
+                  icon={<Heart className="text-rose-500 fill-rose-500" />}
+                  label="💍 বিবাহের বায়োডাটা ম্যানেজমেন্ট"
+                  active={activeMenu === "matrimonial-management"}
+                  onClick={() => {
+                    setActiveMenu("matrimonial-management");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
+                  icon={<Wifi className="text-emerald-500" />}
+                  label="📡 টেলিকম অফার ও অর্ডার"
+                  active={activeMenu === "telecom-management"}
+                  onClick={() => {
+                    setActiveMenu("telecom-management");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
                   icon={<PackagePlus />}
                   label="প্রোডাক্ট যোগ করুন"
                   active={activeMenu === "add-product"}
@@ -742,6 +762,14 @@ export const Admin: React.FC = () => {
         {/* VIEW 1: ALL PRODUCTS MANAGEMENT (VIEW, EDIT, DELETE) */}
         {activeMenu === "all-products" ? (
           <ProductManagement onNavigateToAddProduct={() => setActiveMenu("add-product")} />
+        ) : activeMenu === "matrimonial-management" ? (
+          <div className="w-full max-w-6xl px-2 sm:px-4 py-4">
+            <BiodataManagement />
+          </div>
+        ) : activeMenu === "telecom-management" ? (
+          <div className="w-full max-w-6xl px-2 sm:px-4 py-4">
+            <TelecomManagement />
+          </div>
         ) : activeMenu === "caption-management" ? (
           <div className="w-full max-w-6xl px-2 sm:px-4 py-4">
             <CaptionManagement />

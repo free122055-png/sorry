@@ -9,7 +9,16 @@ export const NotificationInitializer: React.FC = () => {
 
   useEffect(() => {
     // 1. Initial OneSignal Init (Read App ID from Firestore with safe catch)
-    notificationService.init().catch(err => {
+    notificationService.init().then(() => {
+      // Auto-request permission on native app launch to ensure Android 13+ users are prompted
+      if (typeof window !== "undefined" && (window as any).plugins?.OneSignal) {
+        setTimeout(() => {
+          notificationService.requestPermission().catch(err => {
+            console.warn("Auto-request permission warning:", err);
+          });
+        }, 1500);
+      }
+    }).catch(err => {
       console.warn("OneSignal initialization skipped:", err?.message || err);
     });
 

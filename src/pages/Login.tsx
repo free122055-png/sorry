@@ -26,7 +26,7 @@ import { ForgotPasswordModal } from "../components/ForgotPasswordModal";
 export const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { loginWithEmail, registerWithEmail } = useAuth();
+  const { loginWithEmail, registerWithEmail, loginWithGoogle } = useAuth();
 
   const searchParams = new URLSearchParams(location.search);
   const redirectUrl = searchParams.get("redirect") || "/account";
@@ -80,6 +80,23 @@ export const Login: React.FC = () => {
       console.warn("Login attempt notice:", err);
       const mapped = getBanglaAuthErrorMessage(err, 'login', phoneParsed.formatted);
       setErrorInfo(mapped);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      setErrorInfo(null);
+      await loginWithGoogle();
+      navigate(redirectUrl, { replace: true });
+    } catch (err: any) {
+      console.warn("Google login error:", err);
+      setErrorInfo({
+        message: "গুগল সাইন-ইন সম্পন্ন করা যায়নি। প্লে কনসোল বা প্রোডাকশন বিল্ডে গুগল সাইন-ইন নির্বিঘ্নে কাজ করার জন্য Firebase Console > Authentication > Sign-in method > Google-এ আপনার প্রজেক্টের SHA-1 সার্টিফিকেট ফিঙ্গারপ্রিন্ট যুক্ত করা আছে কিনা তা নিশ্চিত করুন।",
+        errorType: "general"
+      });
     } finally {
       setLoading(false);
     }
@@ -201,52 +218,53 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#002A1A] relative overflow-hidden font-['Plus_Jakarta_Sans'] selection:bg-[#F4A300] selection:text-white">
-      {/* Background Icons Pattern - Enhanced to match photo */}
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none">
-        <div className="absolute inset-0" style={{ 
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 20h10v10H20V20zm40 40h10v10H60V60zM30 70h5v5h-5v-5zm40-40h5v5h-5v-5z' fill='%23ffffff' fill-opacity='1'/%3E%3C/svg%3E")`,
-          backgroundSize: '150px 150px'
-        }} />
-      </div>
+    <div className="min-h-screen w-full bg-white relative overflow-x-hidden font-['Plus_Jakarta_Sans'] flex flex-col justify-center py-8 px-5">
+      <div className="relative z-10 max-w-md mx-auto w-full flex flex-col">
+        {/* Back Button */}
+        <div className="mb-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-10 h-10 bg-gray-100 hover:bg-gray-200 text-[#002A1A] rounded-full flex items-center justify-center transition-colors shadow-sm cursor-pointer"
+            title="পেছনে যান"
+          >
+            <ChevronLeft className="w-6 h-6" />
+          </button>
+        </div>
 
-      <div className="relative z-10 max-w-lg mx-auto px-5 py-6 flex flex-col min-h-screen">
-        {/* Exact Logo Layout from Photo */}
-        <div className="text-center mb-6 pt-4">
-          <div className="flex flex-col items-center justify-center mb-1">
-            <span className="text-[9px] font-black tracking-[0.4em] text-white/90 mb-1 leading-none">ALL</span>
-            <div className="bg-[#F4A300] p-1.5 rounded-lg shadow-lg shadow-black/20">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-            </div>
+        {/* Exact Logo & Header from Reference Image */}
+        <div className="text-center mb-8 flex flex-col items-center">
+          <div className="w-20 h-20 bg-[#002A1A] rounded-[24px] flex items-center justify-center shadow-lg mb-4 text-white">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>
+              <path d="M3 6h18"/>
+              <path d="M16 10a4 4 0 0 1-8 0"/>
+            </svg>
           </div>
-          <h1 className="text-[38px] font-black text-white tracking-[-0.03em] leading-none mb-2">MAYADIN</h1>
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="h-[1px] w-12 bg-[#F4A300]/50 relative">
-              <div className="absolute -right-1 -top-[1.5px] w-1 h-1 bg-[#F4A300] rotate-45" />
-            </div>
-            <span className="text-[13px] font-black tracking-[0.6em] text-[#F4A300] translate-x-1">BAZAR</span>
-            <div className="h-[1px] w-12 bg-[#F4A300]/50 relative">
-              <div className="absolute -left-1 -top-[1.5px] w-1 h-1 bg-[#F4A300] rotate-45" />
-            </div>
+          <p className="text-[15px] font-bold text-[#002A1A] mb-3">বিশ্বস্ত কেনাকাটা, সহজ অভিজ্ঞতা</p>
+          <div className="flex items-center justify-center gap-3 w-48">
+            <div className="h-[1px] flex-1 bg-emerald-800/30" />
+            <span className="text-emerald-700 text-sm">🌿</span>
+            <div className="h-[1px] flex-1 bg-emerald-800/30" />
           </div>
-          <p className="text-[14px] text-[#F4A300] font-medium opacity-100">আপনার বাজার, আপনার ঠিকানা</p>
         </div>
 
         <AnimatePresence mode="wait">
           {view === 'login' ? (
             <motion.div
               key="login"
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -30 }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-              className="flex-1 flex flex-col"
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+              className="flex flex-col"
             >
-              <div className="bg-white rounded-[45px] shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-8 pb-10 relative">
-                {/* Visual Accent - Top Bar */}
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1 bg-[#F4A300] rounded-full opacity-60" />
-
-                <h2 className="text-[22px] font-black text-[#002A1A] text-center mb-8 mt-2">লগইন করুন</h2>
+              <div className="text-center mb-6">
+                <h1 className="text-[28px] font-black text-[#002A1A] mb-1">লগইন করুন</h1>
+                <p className="text-[13px] font-bold text-gray-500 leading-relaxed">
+                  আপনার অ্যাকাউন্টে প্রবেশ করুন<br />
+                  এবং কেনাকাটা চালিয়ে যান
+                </p>
+              </div>
 
                 {successInfo && (
                   <div className="mb-6 p-4 rounded-2xl text-[13px] border bg-emerald-50 text-emerald-900 border-emerald-200 flex items-start gap-2.5">
@@ -280,20 +298,20 @@ export const Login: React.FC = () => {
                   </div>
                 )}
 
-                <form onSubmit={handleLogin} className="space-y-6">
+                <form onSubmit={handleLogin} className="space-y-5">
                   {/* Phone Input */}
                   <div>
                     <label className="block text-[13px] font-bold text-gray-500 mb-2 px-1">মোবাইল নম্বর</label>
                     <div className="relative">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100">
-                        <Phone className="w-5 h-5 text-gray-700" />
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100 shadow-sm">
+                        <Phone className="w-5 h-5 text-[#002A1A]" />
                       </div>
                       <input
                         type="tel"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
                         placeholder="01XXXXXXXXX"
-                        className="w-full bg-white border border-gray-200 focus:border-[#003322] focus:ring-4 focus:ring-green-500/5 rounded-[18px] py-4.5 pl-16 pr-6 text-[15px] font-bold text-gray-900 outline-none transition-all placeholder:text-gray-300 placeholder:font-medium"
+                        className="w-full bg-white border border-gray-200 focus:border-[#003322] focus:ring-4 focus:ring-green-500/5 rounded-[18px] py-4 pl-16 pr-6 text-[15px] font-bold text-gray-900 outline-none transition-all placeholder:text-gray-300 placeholder:font-medium"
                         required
                       />
                     </div>
@@ -303,30 +321,30 @@ export const Login: React.FC = () => {
                   <div>
                     <label className="block text-[13px] font-bold text-gray-500 mb-2 px-1">পাসওয়ার্ড</label>
                     <div className="relative">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100">
-                        <Lock className="w-5 h-5 text-gray-700" />
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100 shadow-sm">
+                        <Lock className="w-5 h-5 text-[#002A1A]" />
                       </div>
                       <input
                         type={showPassword ? "text" : "password"}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="আপনার পাসওয়ার্ড লিখুন"
-                        className="w-full bg-white border border-gray-200 focus:border-[#003322] focus:ring-4 focus:ring-green-500/5 rounded-[18px] py-4.5 pl-16 pr-14 text-[15px] font-bold text-gray-900 outline-none transition-all placeholder:text-gray-300 placeholder:font-medium"
+                        className="w-full bg-white border border-gray-200 focus:border-[#003322] focus:ring-4 focus:ring-green-500/5 rounded-[18px] py-4 pl-16 pr-14 text-[15px] font-bold text-gray-900 outline-none transition-all placeholder:text-gray-300 placeholder:font-medium"
                         required
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 p-1"
+                        className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 p-1 hover:text-gray-600"
                       >
                         {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                       </button>
                     </div>
-                    <div className="text-right mt-3">
+                    <div className="text-right mt-2.5">
                       <button 
                         type="button" 
                         onClick={() => setShowForgotModal(true)}
-                        className="text-[13px] font-bold text-[#003322] hover:underline opacity-90 cursor-pointer"
+                        className="text-[13px] font-bold text-[#003322] hover:underline cursor-pointer"
                       >
                         পাসওয়ার্ড ভুলে গেছেন?
                       </button>
@@ -336,30 +354,47 @@ export const Login: React.FC = () => {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full mt-2 bg-gradient-to-r from-[#002A1A] to-[#014028] text-white py-5 rounded-[20px] font-black text-[16px] flex items-center justify-center gap-3 shadow-xl active:scale-98 transition-all disabled:opacity-70"
+                    className="w-full mt-3 bg-[#002A1A] hover:bg-[#00381A] text-white py-4.5 rounded-[20px] font-black text-[16px] flex items-center justify-center gap-3 shadow-lg active:scale-98 transition-all disabled:opacity-70"
                   >
                     {loading ? "লগইন হচ্ছে..." : "লগইন করুন"}
                     {!loading && <ArrowRight className="w-5 h-5" />}
                   </button>
                 </form>
 
-                <div className="mt-8 mb-6 flex items-center gap-4 px-4">
-                  <div className="h-[1px] flex-1 bg-gray-100" />
-                  <span className="text-[11px] font-black text-gray-300 uppercase tracking-[0.2em]">অথবা</span>
-                  <div className="h-[1px] flex-1 bg-gray-100" />
+                <div className="my-5 flex items-center gap-4 px-2">
+                  <div className="h-[1px] flex-1 bg-gray-200" />
+                  <span className="text-[12px] font-black text-gray-400 uppercase tracking-[0.2em]">অথবা</span>
+                  <div className="h-[1px] flex-1 bg-gray-200" />
                 </div>
 
-                <div className="text-center space-y-4">
-                  <p className="text-[14px] font-bold text-gray-400">Mayadin Bazar-এ নতুন?</p>
+                {/* Google Sign-In Button matching reference image */}
+                <button
+                  type="button"
+                  onClick={handleGoogleLogin}
+                  disabled={loading}
+                  className="w-full py-4 bg-white border-2 border-gray-200 hover:border-[#002A1A] rounded-[18px] text-gray-800 font-black text-[15px] flex items-center justify-center gap-3 shadow-sm transition-all active:scale-98 disabled:opacity-70 mb-5"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/>
+                    <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.19v3.15C3.2 21.2 7.28 24 12 24z"/>
+                    <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.19C.43 8.1 0 9.8 0 12s.43 3.9 1.19 5.42l4.09-3.15z"/>
+                    <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.28 0 3.2 2.8 1.19 6.58l4.09 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                  </svg>
+                  <span>Google দিয়ে লগইন করুন</span>
+                </button>
+
+                {/* Register Link matching reference image */}
+                <div className="text-center pt-1 mb-4">
                   <button
+                    type="button"
                     onClick={() => setView('register')}
-                    className="w-full py-4.5 border-2 border-gray-100 rounded-[20px] text-[#002A1A] font-black text-[15px] flex items-center justify-center gap-3 hover:bg-gray-50 transition-all active:scale-98"
+                    className="text-[14px] font-bold text-[#002A1A] hover:underline inline-flex items-center gap-1.5 cursor-pointer"
                   >
-                    <User className="w-5 h-5" />
-                    নতুন অ্যাকাউন্ট তৈরি করুন
+                    <span>এখনও অ্যাকাউন্ট নেই?</span>
+                    <span className="font-black">রেজিষ্ট্রেশন করুন</span>
+                    <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
-              </div>
             </motion.div>
           ) : view === 'register' ? (
             <motion.div
@@ -370,7 +405,7 @@ export const Login: React.FC = () => {
               transition={{ duration: 0.4, ease: "easeOut" }}
               className="flex-1 flex flex-col"
             >
-              <div className="bg-white rounded-[45px] shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-8 pb-10 relative">
+              <div className="bg-white rounded-[40px] shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-6 sm:p-8 pb-8 relative border border-gray-100">
                 <button 
                   onClick={() => setView('login')}
                   className="absolute left-6 top-6 w-11 h-11 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-100 hover:bg-gray-100 transition-colors"
@@ -378,7 +413,7 @@ export const Login: React.FC = () => {
                   <ChevronLeft className="w-6 h-6 text-[#002A1A]" />
                 </button>
 
-                <h2 className="text-[22px] font-black text-[#002A1A] text-center mb-8 mt-4">নতুন অ্যাকাউন্ট তৈরি করুন</h2>
+                <h2 className="text-[22px] font-black text-[#002A1A] text-center mb-6 mt-3">নতুন অ্যাকাউন্ট তৈরি করুন</h2>
 
                 {errorInfo && (
                   <div className={`mb-6 p-4 rounded-2xl text-[13px] border flex flex-col gap-2.5 ${
@@ -410,8 +445,8 @@ export const Login: React.FC = () => {
                   <div>
                     <label className="block text-[13px] font-bold text-gray-500 mb-1.5 px-1">আপনার নাম</label>
                     <div className="relative">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100">
-                        <User className="w-5 h-5 text-gray-700" />
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100 shadow-sm">
+                        <User className="w-5 h-5 text-[#002A1A]" />
                       </div>
                       <input
                         type="text"
@@ -428,8 +463,8 @@ export const Login: React.FC = () => {
                   <div>
                     <label className="block text-[13px] font-bold text-gray-500 mb-1.5 px-1">মোবাইল নম্বর</label>
                     <div className="relative">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100">
-                        <Phone className="w-5 h-5 text-gray-700" />
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100 shadow-sm">
+                        <Phone className="w-5 h-5 text-[#002A1A]" />
                       </div>
                       <input
                         type="tel"
@@ -446,8 +481,8 @@ export const Login: React.FC = () => {
                   <div>
                     <label className="block text-[13px] font-bold text-gray-500 mb-1.5 px-1">পাসওয়ার্ড</label>
                     <div className="relative">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100">
-                        <Lock className="w-5 h-5 text-gray-700" />
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100 shadow-sm">
+                        <Lock className="w-5 h-5 text-[#002A1A]" />
                       </div>
                       <input
                         type={showPassword ? "text" : "password"}
@@ -471,8 +506,8 @@ export const Login: React.FC = () => {
                   <div>
                     <label className="block text-[13px] font-bold text-gray-500 mb-1.5 px-1">পাসওয়ার্ড নিশ্চিত করুন</label>
                     <div className="relative">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100">
-                        <Lock className="w-5 h-5 text-gray-700" />
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 bg-white rounded-xl flex items-center justify-center border border-gray-100 shadow-sm">
+                        <Lock className="w-5 h-5 text-[#002A1A]" />
                       </div>
                       <input
                         type={showConfirmPassword ? "text" : "password"}
@@ -495,14 +530,14 @@ export const Login: React.FC = () => {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full mt-4 bg-gradient-to-r from-[#002A1A] to-[#014028] text-white py-5 rounded-[20px] font-black text-[16px] flex items-center justify-center gap-3 shadow-xl active:scale-98 transition-all disabled:opacity-70"
+                    className="w-full mt-4 bg-[#002A1A] hover:bg-[#00381A] text-white py-4.5 rounded-[20px] font-black text-[16px] flex items-center justify-center gap-3 shadow-lg active:scale-98 transition-all disabled:opacity-70"
                   >
                     {loading ? "তৈরি হচ্ছে..." : "অ্যাকাউন্ট তৈরি করুন"}
                     {!loading && <ArrowRight className="w-5 h-5" />}
                   </button>
                 </form>
 
-                <div className="mt-8 text-center">
+                <div className="mt-6 text-center">
                   <p className="text-[12px] font-bold text-gray-400 leading-relaxed px-4">
                     অ্যাকাউন্ট তৈরি করে আপনি আমাদের <br />
                     <span className="text-[#002A1A] underline underline-offset-2">Terms & Conditions</span> এবং <span className="text-[#002A1A] underline underline-offset-2">Privacy Policy</span>-তে সম্মত হচ্ছেন।
@@ -519,8 +554,8 @@ export const Login: React.FC = () => {
               transition={{ duration: 0.4, ease: "easeOut" }}
               className="flex-1 flex flex-col"
             >
-              <div className="bg-white rounded-[45px] shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-8 pb-10 relative">
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1 bg-[#F4A300] rounded-full opacity-60" />
+              <div className="bg-white rounded-[40px] shadow-[0_20px_50px_rgba(0,0,0,0.3)] p-6 sm:p-8 pb-8 relative border border-gray-100">
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 w-12 h-1 bg-[#F4A300] rounded-full opacity-80" />
                 <div className="mt-2">
                   <OtpVerificationView
                     phoneNumber={phoneNumber}
@@ -534,26 +569,14 @@ export const Login: React.FC = () => {
         </AnimatePresence>
 
         {/* Footer Features - Exact from Photo */}
-        <div className="mt-auto py-8">
-          <div className="flex items-center justify-between gap-2 px-2">
-            <div className="flex flex-col items-center gap-2 flex-1">
-              <div className="w-11 h-11 rounded-full bg-[#F4A300]/15 flex items-center justify-center border border-[#F4A300]/20">
-                <ShieldCheck className="w-6 h-6 text-[#F4A300]" strokeWidth={2.5} />
-              </div>
-              <span className="text-[11px] font-black text-white/70 text-center tracking-tight">নিরাপদ লেনদেন</span>
+        <div className="mt-8 py-4">
+          <div className="flex items-center justify-center gap-6 mb-3">
+            <div className="h-[1px] w-16 bg-white/20" />
+            <div className="flex items-center gap-2 text-white/90 text-xs font-bold">
+              <span>🕌</span>
+              <span>বিশ্বাসে কেনাকাটা • নিরাপদ লেনদেন</span>
             </div>
-            <div className="flex flex-col items-center gap-2 flex-1">
-              <div className="w-11 h-11 rounded-full bg-[#F4A300]/15 flex items-center justify-center border border-[#F4A300]/20">
-                <Truck className="w-6 h-6 text-[#F4A300]" strokeWidth={2.5} />
-              </div>
-              <span className="text-[11px] font-black text-white/70 text-center tracking-tight">দ্রুত ডেলিভারি</span>
-            </div>
-            <div className="flex flex-col items-center gap-2 flex-1">
-              <div className="w-11 h-11 rounded-full bg-[#F4A300]/15 flex items-center justify-center border border-[#F4A300]/20">
-                <ShieldCheck className="w-6 h-6 text-[#F4A300]" strokeWidth={2.5} />
-              </div>
-              <span className="text-[11px] font-black text-white/70 text-center tracking-tight">বিশ্বস্ত সেবা</span>
-            </div>
+            <div className="h-[1px] w-16 bg-white/20" />
           </div>
         </div>
       </div>
