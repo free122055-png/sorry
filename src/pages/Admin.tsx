@@ -31,6 +31,7 @@ import { EmailAutomationSection } from "../components/admin/EmailAutomationSecti
 import { FloatingBubbleAdminSettings } from "../components/admin/FloatingBubbleAdminSettings";
 import { BiodataManagement } from "../components/admin/BiodataManagement";
 import { TelecomManagement } from "../components/admin/TelecomManagement";
+import { PromoCodeManagement } from "../components/admin/PromoCodeManagement";
 import { useFirestoreCategories } from "../hooks/useCategories";
 import { CustomDropdown } from "../components/CustomDropdown";
 
@@ -60,7 +61,7 @@ OVKwXvSuAXa961yvmxhloAvVNj3PHewurSsi+j//+6+EtA9G5LJmj+1BBhxglwOk
 export const Admin: React.FC = () => {
   // Navigation Menu State
   const [activeMenu, setActiveMenu] = useState<
-    "all-products" | "add-product" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management" | "caption-management" | "matrimonial-management" | "telecom-management"
+    "all-products" | "add-product" | "promo-codes" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management" | "caption-management" | "matrimonial-management" | "telecom-management"
   >("all-products");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedUserForNotification, setSelectedUserForNotification] = useState<any>(null);
@@ -533,6 +534,15 @@ export const Admin: React.FC = () => {
                   active={activeMenu === "add-product"}
                   onClick={() => {
                     setActiveMenu("add-product");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
+                  icon={<Tag className="text-amber-500" />}
+                  label="🎟️ প্রমো কোড ম্যানেজমেন্ট"
+                  active={activeMenu === "promo-codes"}
+                  onClick={() => {
+                    setActiveMenu("promo-codes");
                     setIsDrawerOpen(false);
                   }}
                 />
@@ -1011,6 +1021,11 @@ export const Admin: React.FC = () => {
                 </a>
               </div>
             </div>
+          </div>
+        ) : activeMenu === "promo-codes" ? (
+          /* VIEW: PROMO CODE MANAGEMENT */
+          <div className="w-full max-w-6xl px-2 sm:px-4 py-4">
+            <PromoCodeManagement />
           </div>
         ) : activeMenu === "banner-management" ? (
           /* VIEW 2: BANNER MANAGEMENT */

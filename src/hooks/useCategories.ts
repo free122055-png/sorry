@@ -10,7 +10,7 @@ export interface CategoryItem {
 }
 
 export const DEFAULT_CATEGORIES: CategoryItem[] = [
-  { id: "cat2", nameBn: "রূপসজ্জা বাজার", nameEn: "Beauty & Grooming", order: 2 },
+  { id: "cat2", nameBn: "অয়েল কর্নার", nameEn: "Oil Corner", order: 2 },
   { id: "cat3", nameBn: "কাপড় ও পরিধান", nameEn: "Clothing & Apparel", order: 3 },
   { id: "cat4", nameBn: "উপহার বাজার", nameEn: "Gifts & Hampers", order: 4 },
   { id: "cat6", nameBn: "ইসলামিক বাজার", nameEn: "Islamic Market", order: 6 }
@@ -44,10 +44,17 @@ export function useFirestoreCategories() {
         for (const d of snapshot.docs) {
           if (ALLOWED_CATEGORY_IDS.includes(d.id)) {
             const data = d.data();
+            let catNameBn = data.nameBn || data.name || "Unknown";
+            if (d.id === "cat2") {
+              catNameBn = "অয়েল কর্নার";
+              if (data.nameBn !== "অয়েল কর্নার") {
+                setDoc(doc(db, "categories", "cat2"), { ...data, nameBn: "অয়েল কর্নার", nameEn: "Oil Corner" }, { merge: true }).catch(() => {});
+              }
+            }
             fetched.push({
               id: d.id,
-              nameBn: data.nameBn || data.name || "Unknown",
-              nameEn: data.nameEn || "",
+              nameBn: catNameBn,
+              nameEn: d.id === "cat2" ? "Oil Corner" : (data.nameEn || ""),
               order: typeof data.order === "number" ? data.order : 99
             });
           } else {

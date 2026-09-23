@@ -62,6 +62,7 @@ import { EmailAutomationSection } from "../components/admin/EmailAutomationSecti
 import { FloatingBubbleAdminSettings } from "../components/admin/FloatingBubbleAdminSettings";
 import { BiodataManagement } from "../components/admin/BiodataManagement";
 import { TelecomManagement } from "../components/admin/TelecomManagement";
+import { PromoCodeManagement } from "../components/admin/PromoCodeManagement";
 import { useFirestoreCategories } from "../hooks/useCategories";
 import { CustomDropdown } from "../components/CustomDropdown";
 
@@ -506,6 +507,7 @@ export const StandaloneAdmin: React.FC = () => {
               <NavButton id="banner-management" icon={ImageIcon} label="অফার ব্যানার সেটিং" />
               <NavButton id="delivery-settings" icon={Truck} label="ডেলিভারি চার্জ সেটিং" />
               <NavButton id="delivery-management" icon={Truck} label="কুরিয়ার ইন্টিগ্রেশন" />
+              <NavButton id="promo-codes" icon={Tag} label="প্রমো কোড ম্যানেজমেন্ট" />
             </div>
 
             {/* 3. Telecom Service */}
@@ -805,6 +807,7 @@ export const StandaloneAdmin: React.FC = () => {
             {activeMenu === "delivery-management" && <CourierDeliveryManagement />}
             {activeMenu === "matrimonial-management" && <BiodataManagement />}
             {activeMenu === "telecom-management" && <TelecomManagement />}
+            {activeMenu === "promo-codes" && <PromoCodeManagement />}
             {activeMenu === "user-management" && (
               <UserManagement onSendNotification={handleSendNotificationToUser} />
             )}

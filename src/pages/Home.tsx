@@ -20,11 +20,11 @@ const DEFAULT_BANNERS = [
 const MARKET_CATEGORIES = [
   {
     id: "cat2",
-    name: "রূপসজ্জা বাজার",
-    count: "850+",
+    name: "অয়েল কর্নার",
+    count: "৫০+",
     icon: <Sparkles className="w-5 h-5 text-white" />,
-    iconBg: "bg-pink-500",
-    image: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=300&q=80"
+    iconBg: "bg-amber-600",
+    image: "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=300&q=80"
   },
   {
     id: "cat3",

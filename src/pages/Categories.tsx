@@ -7,7 +7,7 @@ import { db } from "../lib/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 
 const mainMarketCategories = [
-  { id: "cat2", name: "Beauty & Grooming", nameBn: "রূপসজ্জা বাজার", subtitle: "সৌন্দর্য ও প্রিমিয়াম গ্রুমিং", image: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=400&q=80", count: "৫০+ পণ্য", color: "bg-rose-50 text-rose-800 border-rose-200" },
+  { id: "cat2", name: "Oil Corner", nameBn: "অয়েল কর্নার", subtitle: "সরিষার তেল, সয়াবিন ও হেয়ার অয়েল", image: "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=400&q=80", count: "৫০+ পণ্য", color: "bg-amber-50 text-amber-900 border-amber-200" },
   { id: "cat3", name: "Clothing & Apparel", nameBn: "কাপড় ও পরিধান বাজার", subtitle: "পুরুষ, নারী ও শিশুদের পোশাক", image: "https://images.unsplash.com/photo-1512436991641-6745cdb1723f?w=400&q=80", count: "৭০+ পণ্য", color: "bg-sky-50 text-sky-800 border-sky-200" },
   { id: "cat4", name: "Gifts & Hampers", nameBn: "উপহার বাজার", subtitle: "প্রিয়জনের জন্য বিশেষ উপহার", image: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=400&q=80", count: "৪০+ পণ্য", color: "bg-amber-50 text-amber-800 border-amber-200" },
   { id: "cat6", name: "Islamic Market", nameBn: "ইসলামিক বাজার", subtitle: "জায়নামাজ, আতর ও ধর্মীয় পণ্য", image: "https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=400&q=80", count: "৬০+ পণ্য", color: "bg-emerald-50 text-emerald-800 border-emerald-200" },
@@ -67,7 +67,7 @@ export const Categories: React.FC = () => {
           onChange={(e) => setSearchQuery(e.target.value)}
           category="general"
           placeholderOverride={[
-            "খাদ্য বা রূপসজ্জা বাজার খুঁজুন...",
+            "খাদ্য বা অয়েল কর্নার খুঁজুন...",
             "ইলেকট্রনিক্স বা পোশাক বাজার...",
             "বই বা উপহার বাজার খুঁজুন...",
             "সকল ক্যাটাগরি থেকে খুঁজুন..."

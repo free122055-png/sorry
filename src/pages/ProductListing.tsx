@@ -728,7 +728,7 @@ export const ProductListing: React.FC = () => {
   };
 
   const isFood = category?.title?.includes("খাদ্য") || categoryId === "cat1" || categoryId === "food";
-  const isBeauty = category?.title?.includes("রূপসজ্জা") || categoryId === "cat2";
+  const isBeauty = category?.title?.includes("রূপসজ্জা") || category?.title?.includes("অয়েল") || categoryId === "cat2";
   const isClothing = category?.title?.includes("কাপড়") || category?.title?.includes("কাপড়") || categoryId === "cat3" || categoryId === "clothing";
   const isGift = category?.title?.includes("উপহার") || categoryId === "cat4" || categoryId === "gift";
   const isFashion = category?.title?.includes("ব্যাগ") || category?.title?.includes("ফ্যাশন") || categoryId === "cat5" || categoryId === "fashion";
@@ -941,7 +941,7 @@ export const ProductListing: React.FC = () => {
     const matched = activeProducts.filter((p) => {
       if (p.categoryId === targetCatId) return true;
       if (isFood && (p.categoryId === "cat1" || p.categoryId === "food" || p.category === "খাদ্য বাজার")) return true;
-      if (isBeauty && (p.categoryId === "cat2" || p.categoryId === "beauty" || p.category === "রূপসজ্জা বাজার")) return true;
+      if (isBeauty && (p.categoryId === "cat2" || p.categoryId === "beauty" || p.category === "রূপসজ্জা বাজার" || p.category === "অয়েল কর্নার")) return true;
       if (isClothing && (p.categoryId === "cat3" || p.categoryId === "clothing" || p.category === "কাপড় ও পরিধান")) return true;
       if (isGift && (p.categoryId === "cat4" || p.categoryId === "gift" || p.category === "উপহার বাজার")) return true;
       if (isFashion && (p.categoryId === "cat5" || p.categoryId === "fashion" || p.category === "ব্যাগ ও ফ্যাশন")) return true;
@@ -2512,10 +2512,10 @@ export const ProductListing: React.FC = () => {
                 </button>
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
-                    <span className="text-[22px]">💄</span>
-                    <span className="text-gray-900 text-xl font-black tracking-tight leading-none">রূপসজ্জা বাজার</span>
+                    <span className="text-[22px]">🫒</span>
+                    <span className="text-gray-900 text-xl font-black tracking-tight leading-none">অয়েল কর্নার</span>
                   </div>
-                  <span className="text-gray-600 text-[11px] font-bold mt-1 opacity-90">(সৌন্দর্য ও ব্যক্তিগত যত্নের সব পণ্য)</span>
+                  <span className="text-gray-600 text-[11px] font-bold mt-1 opacity-90">(সরিষার তেল, সয়াবিন ও হেয়ার অয়েল)</span>
                 </div>
               </div>
             ) : (
@@ -2568,7 +2568,7 @@ export const ProductListing: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={isBeauty ? "বিউটি ও রূপসজ্জা পণ্য খুঁজুন..." : "পণ্য বা ক্যাটাগরি সার্চ করুন..."}
+            placeholder={isBeauty ? "সরিষার তেল বা হেয়ার অয়েল খুঁজুন..." : "পণ্য বা ক্যাটাগরি সার্চ করুন..."}
             className={`w-full ${isBeauty ? 'bg-[#f3f4f6] text-gray-800 rounded-full py-3.5' : 'bg-white text-gray-800 rounded-2xl py-3.5'} pl-11 pr-10 text-[13px] font-medium shadow-sm border border-gray-100 focus:outline-none`}
           />
           {searchQuery && (

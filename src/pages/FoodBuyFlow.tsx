@@ -4,14 +4,14 @@ import {
   ArrowLeft, Plus, Minus, Trash2, MapPin, Truck, Store, 
   Wallet, CreditCard, Building2, Check, CheckCircle2, ChevronRight, 
   Clock, Phone, Star, ShieldCheck, Navigation, ShoppingBag, ShoppingCart, 
-  Sparkles, CheckSquare, RotateCcw, AlertCircle
+  Sparkles, CheckSquare, RotateCcw, AlertCircle, Ticket, Tag, Percent
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { SEO } from "../components/SEO";
 import { defaultFoodCatalog, FoodProduct } from "../data/foodProducts";
 import { bangladeshDivisions, getDistricts, getUpazilas, getUnions } from "../data/bangladeshGeo";
 import { db } from "../lib/firebase";
-import { collection, addDoc, doc, getDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, doc, getDoc, getDocs, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { User, Compass } from "lucide-react";
@@ -279,8 +279,142 @@ export const FoodBuyFlow: React.FC = () => {
     return deliveryConfig.outsideDhaka;
   };
 
+  // Promo Code State
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [promoError, setPromoError] = useState("");
+  const [promoSuccess, setPromoSuccess] = useState("");
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
   const deliveryCharge = getDeliveryCharge();
-  const grandTotal = totalItemPrice + deliveryCharge;
+  const grandTotal = Math.max(0, totalItemPrice - discountAmount + deliveryCharge);
+
+  // Recalculate discount whenever totalItemPrice or appliedPromo changes
+  useEffect(() => {
+    if (appliedPromo) {
+      if (appliedPromo.minOrderAmount && totalItemPrice < appliedPromo.minOrderAmount) {
+        setAppliedPromo(null);
+        setDiscountAmount(0);
+        setPromoError(`সর্বনিম্ন ৳${appliedPromo.minOrderAmount} টাকার অর্ডারে এই প্রমো কোড প্রযোজ্য।`);
+        return;
+      }
+      const newDiscount = appliedPromo.discountType === "percentage"
+        ? Math.round((totalItemPrice * Number(appliedPromo.discountValue)) / 100)
+        : Math.min(Number(appliedPromo.discountValue), totalItemPrice);
+      setDiscountAmount(newDiscount);
+    }
+  }, [totalItemPrice, appliedPromo]);
+
+  const handleApplyPromo = async () => {
+    setPromoError("");
+    setPromoSuccess("");
+    const code = promoCodeInput.trim().toUpperCase();
+
+    if (!code) {
+      setPromoError("অনুগ্রহ করে একটি প্রমো কোড লিখুন।");
+      return;
+    }
+
+    setIsApplyingPromo(true);
+
+    try {
+      let promoList: any[] = [];
+      try {
+        const snap = await getDocs(collection(db, "promo_codes"));
+        snap.forEach(docSnap => {
+          promoList.push({ id: docSnap.id, ...docSnap.data() });
+        });
+      } catch (e) {
+        console.warn("Could not fetch promo_codes from Firestore:", e);
+      }
+
+      if (promoList.length === 0) {
+        const local = localStorage.getItem("admin_promo_codes");
+        if (local) {
+          try { promoList = JSON.parse(local); } catch(e) {}
+        }
+      }
+
+      const found = promoList.find((p: any) => p.code === code && p.status === 'active');
+
+      if (!found) {
+        if (code === "MAYADIN" || code === "SAVE10" || code === "WELCOME") {
+          const calcDiscount = Math.round(totalItemPrice * 0.1);
+          const finalDiscount = calcDiscount > 0 ? calcDiscount : 50;
+          setAppliedPromo({
+            code,
+            discountType: "percentage",
+            discountValue: 10,
+            categoryId: "all"
+          });
+          setDiscountAmount(finalDiscount);
+          setPromoSuccess(`🎉 অভিনন্দন! ১০% (৳${finalDiscount}) ছাড় যুক্ত হয়েছে!`);
+          setIsApplyingPromo(false);
+          return;
+        }
+
+        setPromoError("অবৈধ বা মেয়াদোত্তীর্ণ প্রমো কোড!");
+        setIsApplyingPromo(false);
+        return;
+      }
+
+      // Check Category Matching
+      const currentCatId = (location.state as any)?.categoryId || (location.state as any)?.category || "";
+      const currentCatName = categoryName || "";
+
+      const isCategoryMatch = 
+        found.categoryId === "all" ||
+        found.categoryId === currentCatId ||
+        (found.categoryName && currentCatName && currentCatName.toLowerCase().includes(found.categoryName.toLowerCase())) ||
+        (found.categoryId === "cat2" && (currentCatName.includes("অয়েল") || currentCatName.includes("Oil"))) ||
+        (found.categoryId === "cat3" && (currentCatName.includes("কাপড়") || currentCatName.includes("পরিধান") || currentCatName.includes("Fashion"))) ||
+        (found.categoryId === "cat4" && (currentCatName.includes("উপহার") || currentCatName.includes("Gift"))) ||
+        (found.categoryId === "cat6" && (currentCatName.includes("ইসলামিক") || currentCatName.includes("Islamic")));
+
+      if (!isCategoryMatch) {
+        setPromoError(`এই প্রমো কোডটি শুধুমাত্র "${found.categoryName || 'নির্দিষ্ট'}" ক্যাটাগরির জন্য প্রযোজ্য!`);
+        setIsApplyingPromo(false);
+        return;
+      }
+
+      // Check Minimum Order Amount
+      if (found.minOrderAmount && totalItemPrice < Number(found.minOrderAmount)) {
+        setPromoError(`এই কোডটি ব্যবহারের জন্য সর্বনিম্ন অর্ডার মূল্য ৳${found.minOrderAmount} হতে হবে!`);
+        setIsApplyingPromo(false);
+        return;
+      }
+
+      // Calculate discount
+      let calcDiscount = 0;
+      if (found.discountType === "percentage") {
+        calcDiscount = Math.round((totalItemPrice * Number(found.discountValue)) / 100);
+      } else {
+        calcDiscount = Number(found.discountValue);
+      }
+
+      if (calcDiscount > totalItemPrice) {
+        calcDiscount = totalItemPrice;
+      }
+
+      setAppliedPromo(found);
+      setDiscountAmount(calcDiscount);
+      setPromoSuccess(`🎉 প্রমো কোড "${found.code}" সফলভাবে প্রযোজ্য হয়েছে! ৳${calcDiscount} ছাড় পেয়েছেন।`);
+    } catch (err: any) {
+      console.error("Error applying promo:", err);
+      setPromoError("প্রমো কোড যাচাই করতে সমস্যা হয়েছে, আবার চেষ্টা করুন।");
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setDiscountAmount(0);
+    setPromoCodeInput("");
+    setPromoError("");
+    setPromoSuccess("");
+  };
 
   // Quantity handlers
   const handleQuantityChange = (itemId: string, delta: number) => {
@@ -458,6 +592,8 @@ export const FoodBuyFlow: React.FC = () => {
       })),
       totalItems: totalItemCount,
       subtotal: totalItemPrice,
+      discount: discountAmount,
+      appliedPromoCode: appliedPromo ? appliedPromo.code : null,
       totalWeightKg: totalWeightKg,
       deliveryMethod: deliveryMethod === "home" ? "হোম ডেলিভারি" : "দোকান / পিকআপ",
       deliveryCharge: deliveryCharge,
@@ -767,6 +903,98 @@ export const FoodBuyFlow: React.FC = () => {
             </div>
           )}
 
+          {/* Professional Promo Code Box */}
+          {orderItems.length > 0 && (
+            <div className="bg-white rounded-[24px] p-4 sm:p-5 border border-gray-100 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                    <Ticket className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-black text-gray-900 leading-tight">
+                      প্রমো কোড ও ডিসকাউন্ট ভাউচার
+                    </h3>
+                    <p className="text-[10px] text-gray-500 font-medium">
+                      ছাড় পেতে প্রমো কোড লিখুন
+                    </p>
+                  </div>
+                </div>
+                {appliedPromo && (
+                  <span className="text-[10px] font-black px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    প্রযোজ্য
+                  </span>
+                )}
+              </div>
+
+              {!appliedPromo ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-2xl p-1.5 focus-within:border-[#004b23] focus-within:ring-2 focus-within:ring-[#004b23]/20 transition-all">
+                    <input
+                      type="text"
+                      value={promoCodeInput}
+                      onChange={(e) => {
+                        setPromoCodeInput(e.target.value.toUpperCase());
+                        setPromoError("");
+                      }}
+                      placeholder="প্রমো কোড লিখুন (যেমন: OIL20, EID50)"
+                      className="flex-1 px-3 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider bg-transparent text-gray-900 placeholder:text-gray-400 placeholder:normal-case focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyPromo}
+                      disabled={isApplyingPromo || !promoCodeInput.trim()}
+                      className="bg-[#004b23] hover:bg-[#00381a] disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-sm cursor-pointer"
+                    >
+                      {isApplyingPromo ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span>প্রয়োগ করুন</span>
+                      )}
+                    </button>
+                  </div>
+                  {promoError && (
+                    <p className="text-red-500 text-[11px] font-bold flex items-center gap-1 px-1">
+                      <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                      {promoError}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-sm">
+                      %
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-black text-xs text-emerald-900 font-mono tracking-wider">
+                          {appliedPromo.code}
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-200/60 px-1.5 py-0.5 rounded-md">
+                          -৳{discountAmount.toLocaleString('bn-BD')} ছাড়
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-emerald-700 font-medium mt-0.5">
+                        {appliedPromo.discountType === "percentage" 
+                          ? `${appliedPromo.discountValue}% ডিসকাউন্ট সফলভাবে যুক্ত হয়েছে!` 
+                          : `৳${appliedPromo.discountValue} ডিসকাউন্ট সফলভাবে যুক্ত হয়েছে!`}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemovePromo}
+                    className="text-xs font-bold text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
+                  >
+                    বাতিল
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Order Summary Calculation Box */}
           {orderItems.length > 0 && (
             <div className="bg-white rounded-[24px] p-5 border border-gray-100 shadow-sm space-y-3">
@@ -783,6 +1011,16 @@ export const FoodBuyFlow: React.FC = () => {
                 <span className="text-gray-600">পণ্যের মোট মূল্য:</span>
                 <span className="font-bold text-gray-900">৳{(totalItemPrice || 0).toLocaleString('bn-BD')}</span>
               </div>
+
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-xs text-emerald-700 font-bold bg-emerald-50/70 p-2 rounded-xl border border-emerald-100">
+                  <span className="flex items-center gap-1">
+                    <Ticket className="w-3.5 h-3.5 text-emerald-600" />
+                    প্রমো কোড ছাড় ({appliedPromo?.code}):
+                  </span>
+                  <span>-৳{(discountAmount || 0).toLocaleString('bn-BD')}</span>
+                </div>
+              )}
 
               <div className="flex justify-between text-xs">
                 <span className="text-gray-600">আনুমানিক ডেলিভারি চার্জ:</span>
@@ -1609,6 +1847,12 @@ export const FoodBuyFlow: React.FC = () => {
               <span className="text-gray-600">পণ্যের মূল্য:</span>
               <span className="font-bold text-gray-900">৳{(totalItemPrice || 0).toLocaleString('bn-BD')}</span>
             </div>
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-xs text-emerald-700 font-bold">
+                <span>প্রমো কোড ছাড় ({appliedPromo?.code}):</span>
+                <span>-৳{(discountAmount || 0).toLocaleString('bn-BD')}</span>
+              </div>
+            )}
             <div className="flex justify-between text-xs">
               <span className="text-gray-600">ডেলিভারি চার্জ:</span>
               <span className="font-bold text-gray-900">৳{(deliveryCharge || 0).toLocaleString('bn-BD')}</span>
@@ -1734,6 +1978,12 @@ export const FoodBuyFlow: React.FC = () => {
                 <span className="text-gray-500">মোট অর্ডার মূল্য:</span>
                 <span className="font-black text-gray-900 text-sm">৳{(placedOrder.grandTotal || 0).toLocaleString('bn-BD')}</span>
               </div>
+              {placedOrder.discount > 0 && (
+                <div className="flex justify-between text-emerald-700 font-bold">
+                  <span>প্রমো কোড ছাড় ({placedOrder.appliedPromoCode}):</span>
+                  <span>-৳{(placedOrder.discount || 0).toLocaleString('bn-BD')}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-500">পেমেন্ট পদ্ধতি:</span>
                 <span className="font-bold text-gray-900">{placedOrder.paymentMethod}</span>

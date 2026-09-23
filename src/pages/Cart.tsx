@@ -4,6 +4,8 @@ import { Trash2, Plus, Minus, ArrowLeft, ShoppingBag, ChevronRight, Ticket, Chec
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "motion/react";
+import { db } from "../lib/firebase";
+import { collection, getDocs } from "firebase/firestore";
 
 export const Cart: React.FC = () => {
   const { items, updateQuantity, removeItem, subtotal, totalItems } = useCart();
@@ -19,7 +21,7 @@ export const Cart: React.FC = () => {
   const [promoError, setPromoError] = useState("");
   const [promoSuccess, setPromoSuccess] = useState("");
 
-  const handleApplyPromo = () => {
+  const handleApplyPromo = async () => {
     setPromoError("");
     setPromoSuccess("");
     const code = promoCode.trim().toUpperCase();
@@ -29,16 +31,63 @@ export const Cart: React.FC = () => {
       return;
     }
 
-    if (code === "MAYADIN" || code === "OFF100" || code === "WELCOME") {
-      const calcDiscount = Math.min(100, Math.round(subtotal * 0.1));
-      setDiscount(calcDiscount > 0 ? calcDiscount : 50);
-      setPromoSuccess(`'${code}' প্রোমো কোড সফলভাবে প্রয়োগ করা হয়েছে! (৳${calcDiscount > 0 ? calcDiscount : 50} ছাড়)`);
-    } else if (code === "SAVE10") {
-      const calcDiscount = Math.round(subtotal * 0.1);
+    try {
+      let promoList: any[] = [];
+      try {
+        const snap = await getDocs(collection(db, "promo_codes"));
+        snap.forEach(docSnap => {
+          promoList.push({ id: docSnap.id, ...docSnap.data() });
+        });
+      } catch (e) {}
+
+      if (promoList.length === 0) {
+        const local = localStorage.getItem("admin_promo_codes");
+        if (local) {
+          try { promoList = JSON.parse(local); } catch(e) {}
+        }
+      }
+
+      const found = promoList.find((p: any) => p.code === code && p.status === 'active');
+
+      if (!found) {
+        if (code === "MAYADIN" || code === "SAVE10" || code === "WELCOME") {
+          const calcDiscount = Math.round(subtotal * 0.1);
+          setDiscount(calcDiscount > 0 ? calcDiscount : 50);
+          setPromoSuccess(`'${code}' প্রমো কোড সফলভাবে প্রয়োগ করা হয়েছে! (৳${calcDiscount > 0 ? calcDiscount : 50} ছাড়)`);
+          return;
+        }
+        setPromoError("দুঃখিত, এটি একটি অবৈধ বা নিষ্ক্রিয় প্রমো কোড।");
+        return;
+      }
+
+      if (found.minOrderAmount && subtotal < found.minOrderAmount) {
+        setPromoError(`এই প্রমো কোড ব্যবহারের জন্য সর্বনিম্ন অর্ডার হতে হবে ৳${found.minOrderAmount}`);
+        return;
+      }
+
+      if (found.categoryId && found.categoryId !== 'all') {
+        const hasMatchingCategoryItem = items.some((item: any) => 
+          item.categoryId === found.categoryId || 
+          item.category === found.categoryName ||
+          (item.categoryId === 'cat2' && found.categoryId === 'cat2')
+        );
+        if (!hasMatchingCategoryItem) {
+          setPromoError(`এই প্রমো কোডটি শুধুমাত্র '${found.categoryName}' ক্যাটাগরির পণ্যের জন্য প্রযোজ্য।`);
+          return;
+        }
+      }
+
+      let calcDiscount = 0;
+      if (found.discountType === 'percentage') {
+        calcDiscount = Math.round((subtotal * found.discountValue) / 100);
+      } else {
+        calcDiscount = Number(found.discountValue) || 0;
+      }
+
       setDiscount(calcDiscount);
-      setPromoSuccess(`'SAVE10' ১০% ছাড় প্রয়োগ করা হয়েছে! (৳${calcDiscount} ছাড়)`);
-    } else {
-      setPromoError("দুঃখিত, এটি একটি অবৈধ বা মেয়ারোত্তীর্ণ প্রোমো কোড।");
+      setPromoSuccess(`'${found.code}' প্রমো কোড সফলভাবে প্রয়োগ করা হয়েছে! (${found.discountType === 'percentage' ? found.discountValue + '% ছাড়' : '৳' + found.discountValue + ' ছাড়'})`);
+    } catch (err) {
+      setPromoError("প্রমো কোড যাচাই করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
     }
   };
 

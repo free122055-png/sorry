@@ -392,7 +392,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({ onNavigate
     return products.filter(p => 
       p.categoryId === catId ||
       (catId === "cat1" && (p.categoryId === "food" || (p as any).category === "খাদ্য বাজার")) ||
-      (catId === "cat2" && (p.categoryId === "beauty" || (p as any).category === "রূপসজ্জা বাজার")) ||
+      (catId === "cat2" && (p.categoryId === "beauty" || (p as any).category === "রূপসজ্জা বাজার" || (p as any).category === "অয়েল কর্নার")) ||
       (catId === "cat3" && (p.categoryId === "clothing" || (p as any).category === "কাপড় ও পরিধান")) ||
       (catId === "cat4" && (p.categoryId === "gift" || (p as any).category === "উপহার বাজার")) ||
       (catId === "cat5" && (p.categoryId === "fashion" || (p as any).category === "ব্যাগ ও ফ্যাশন")) ||
@@ -411,7 +411,7 @@ export const ProductManagement: React.FC<ProductManagementProps> = ({ onNavigate
       selectedCategoryFilter === "all" ||
       item.categoryId === selectedCategoryFilter ||
       (selectedCategoryFilter === "cat1" && (item.categoryId === "food" || (item as any).category === "খাদ্য বাজার")) ||
-      (selectedCategoryFilter === "cat2" && (item.categoryId === "beauty" || (item as any).category === "রূপসজ্জা বাজার")) ||
+      (selectedCategoryFilter === "cat2" && (item.categoryId === "beauty" || (item as any).category === "রূপসজ্জা বাজার" || (item as any).category === "অয়েল কর্নার")) ||
       (selectedCategoryFilter === "cat3" && (item.categoryId === "clothing" || (item as any).category === "কাপড় ও পরিধান")) ||
       (selectedCategoryFilter === "cat4" && (item.categoryId === "gift" || (item as any).category === "উপহার বাজার")) ||
       (selectedCategoryFilter === "cat5" && (item.categoryId === "fashion" || (item as any).category === "ব্যাগ ও ফ্যাশন")) ||
