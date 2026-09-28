@@ -77,6 +77,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return digits.length >= 10 ? digits.slice(-10) : digits;
   };
 
+  const generateReminderCode = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = 'RM';
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  };
+
   const fetchProfile = async (firebaseUser: User) => {
     // If we already have a profile and it matches this user, don't refetch
     if (profile && profile.id === firebaseUser.uid) return;
@@ -110,6 +119,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           lastLoginAt: data.lastLoginAt || Date.now()
         });
 
+        // Ensure reminderCode exists
+        if (!data.reminderCode) {
+          const newCode = generateReminderCode();
+          updateDoc(docRef, { reminderCode: newCode }).catch(e => console.warn("Code generation error:", e));
+          setProfile(prev => prev ? { ...prev, reminderCode: newCode } : null);
+        }
+
         // Update last login and role asynchronously using setDoc with merge: true - DON'T AWAIT
         setDoc(docRef, { 
           role: currentRole,
@@ -128,6 +144,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           status: "active",
           phoneNumber: phone,
           photoURL: firebaseUser.photoURL || "",
+          reminderCode: generateReminderCode(),
           createdAt: Date.now(),
           updatedAt: Date.now(),
           lastLoginAt: Date.now(),
@@ -161,6 +178,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    // 1. Handle Redirect Result from Google Sign-In safely
+    if (typeof window !== "undefined") {
+      getRedirectResult(auth)
+        .then((result) => {
+          if (result?.user) {
+            setUser(result.user);
+            fetchProfile(result.user);
+            closeAuthModal();
+          }
+        })
+        .catch((err: any) => {
+          const errString = String(err?.message || err?.code || err || "").toLowerCase();
+          // Gracefully absorb transient IndexedDB / browser storage lifecycle events
+          if (
+            errString.includes("database is closing") ||
+            errString.includes("indexeddb") ||
+            errString.includes("backing store") ||
+            err?.code === "auth/internal-error"
+          ) {
+            console.warn("Notice: Auth redirect storage handled:", err?.message || err);
+            return;
+          }
+          console.warn("Google Redirect Result notice:", err);
+        });
+    }
+
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
@@ -268,23 +311,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginWithGoogle = async (): Promise<User> => {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
+    
     try {
+      // 1. Try Popup first (best for desktop/web)
       const result = await signInWithPopup(auth, provider);
       setUser(result.user);
       await fetchProfile(result.user);
       closeAuthModal();
       return result.user;
     } catch (popupErr: any) {
-      console.warn("Popup sign-in notice, falling back to redirect:", popupErr);
-      await signInWithRedirect(auth, provider);
-      const redirectResult = await getRedirectResult(auth);
-      if (redirectResult && redirectResult.user) {
-        setUser(redirectResult.user);
-        await fetchProfile(redirectResult.user);
-        closeAuthModal();
-        return redirectResult.user;
+      console.warn("Popup sign-in notice, falling back to redirect:", popupErr.code, popupErr.message);
+      
+      // If it's a specific block or restricted environment, try redirect
+      if (
+        popupErr.code === "auth/popup-blocked" || 
+        popupErr.code === "auth/popup-closed-by-user" ||
+        popupErr.code === "auth/cancelled-popup-request" ||
+        popupErr.message?.includes("closed")
+      ) {
+        // user closed it or it was blocked, just throw
+        throw popupErr;
       }
-      throw popupErr;
+
+      // Otherwise, attempt redirect
+      await signInWithRedirect(auth, provider);
+      // After this call, the browser will navigate away, 
+      // so we return a dummy promise that never resolves or just throw a special error
+      return new Promise(() => {}); 
     }
   };
 
@@ -366,6 +419,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Sync document in Firestore from client
             setDoc(doc(db, "users", registeredUser.uid), userDoc, { merge: true }).catch(e => {
               console.warn("Client Firestore user sync notice:", e);
+            });
+
+            // Trigger Welcome Push Notification for new registered account
+            notificationService.sendRegistrationWelcomeNotification(registeredUser.uid).catch(e => {
+              console.warn("Welcome push notification trigger notice:", e);
             });
 
             closeAuthModal();
@@ -466,6 +524,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       })()
     ]).catch(err => handleFirestoreError(err, OperationType.CREATE, `users/${registeredUser.uid}`));
+
+    // Trigger Welcome Push Notification for new registered account
+    notificationService.sendRegistrationWelcomeNotification(registeredUser.uid).catch(e => {
+      console.warn("Welcome push notification trigger notice:", e);
+    });
 
     closeAuthModal();
     return registeredUser;

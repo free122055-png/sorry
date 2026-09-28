@@ -5,22 +5,13 @@ import {
 } from "lucide-react";
 import { db } from "../../lib/firebase";
 import { 
-  collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, onSnapshot 
+  collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot 
 } from "firebase/firestore";
 import { useFirestoreCategories } from "../../hooks/useCategories";
 import { CustomDropdown } from "../CustomDropdown";
+import { PromoCodeItem } from "../../lib/promoService";
 
-export interface PromoCodeItem {
-  id: string;
-  code: string;
-  categoryId: string; // "all" or specific category id
-  categoryName: string;
-  discountType: "percentage" | "fixed";
-  discountValue: number; // e.g. 10 for 10% or 100 for 100 BDT
-  minOrderAmount?: number;
-  status: "active" | "inactive";
-  createdAt: number;
-}
+export type { PromoCodeItem };
 
 export const PromoCodeManagement: React.FC = () => {
   const { categories } = useFirestoreCategories();
@@ -45,17 +36,36 @@ export const PromoCodeManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    const q = query(collection(db, "promo_codes"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    // Listen to promo_codes in real-time without composite index dependencies
+    const promoCol = collection(db, "promo_codes");
+    const unsubscribe = onSnapshot(promoCol, (snapshot) => {
       const items: PromoCodeItem[] = [];
       snapshot.forEach((docSnap) => {
-        items.push({ id: docSnap.id, ...docSnap.data() } as PromoCodeItem);
+        const d = docSnap.data();
+        items.push({
+          id: docSnap.id,
+          code: (d.code || "").trim().toUpperCase(),
+          categoryId: d.categoryId || "all",
+          categoryName: d.categoryName || "সকল ক্যাটাগরি",
+          discountType: d.discountType === "fixed" ? "fixed" : "percentage",
+          discountValue: Number(d.discountValue) || 0,
+          minOrderAmount: Number(d.minOrderAmount) || 0,
+          status: d.status === "inactive" ? "inactive" : "active",
+          createdAt: d.createdAt ? (typeof d.createdAt === 'object' && d.createdAt.seconds ? d.createdAt.seconds * 1000 : d.createdAt) : Date.now(),
+          updatedAt: d.updatedAt ? (typeof d.updatedAt === 'object' && d.updatedAt.seconds ? d.updatedAt.seconds * 1000 : d.updatedAt) : Date.now()
+        });
       });
+
+      // Sort descending by creation date
+      items.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+
       setPromoCodes(items);
+      try {
+        localStorage.setItem("admin_promo_codes", JSON.stringify(items));
+      } catch (e) {}
       setLoading(false);
     }, (err) => {
       console.warn("Promo codes fetch error, falling back to local storage:", err);
-      // Fallback
       const local = localStorage.getItem("admin_promo_codes");
       if (local) {
         try { setPromoCodes(JSON.parse(local)); } catch(e) {}
@@ -68,7 +78,8 @@ export const PromoCodeManagement: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code.trim() || !discountValue) {
+    const cleanCode = code.trim().toUpperCase();
+    if (!cleanCode || !discountValue) {
       showToast("দয়া করে প্রমো কোড এবং ডিসকাউন্ট পরিমাণ লিখুন।", true);
       return;
     }
@@ -78,28 +89,47 @@ export const PromoCodeManagement: React.FC = () => {
       ? "সকল ক্যাটাগরি" 
       : (categoryId === "cat2" ? "অয়েল কর্নার" : (targetCat?.nameBn || targetCat?.nameEn || "নির্দিষ্ট ক্যাটাগরি"));
 
-    const promoData = {
-      code: code.trim().toUpperCase(),
-      categoryId,
-      categoryName: catName,
-      discountType,
-      discountValue: Number(discountValue),
-      minOrderAmount: minOrderAmount ? Number(minOrderAmount) : 0,
-      status,
-      createdAt: currentId ? undefined : Date.now(),
-      updatedAt: serverTimestamp()
-    };
+    const now = Date.now();
 
     try {
       if (currentId) {
-        await updateDoc(doc(db, "promo_codes", currentId), promoData);
+        const updateData: any = {
+          code: cleanCode,
+          categoryId,
+          categoryName: catName,
+          discountType,
+          discountValue: Number(discountValue),
+          minOrderAmount: minOrderAmount ? Number(minOrderAmount) : 0,
+          status,
+          updatedAt: now
+        };
+        await updateDoc(doc(db, "promo_codes", currentId), updateData);
         showToast("প্রমো কোড সফলভাবে আপডেট করা হয়েছে!");
       } else {
-        await addDoc(collection(db, "promo_codes"), {
-          ...promoData,
-          createdAt: serverTimestamp()
-        });
+        const newPromo: any = {
+          code: cleanCode,
+          categoryId,
+          categoryName: catName,
+          discountType,
+          discountValue: Number(discountValue),
+          minOrderAmount: minOrderAmount ? Number(minOrderAmount) : 0,
+          status,
+          createdAt: now,
+          updatedAt: now
+        };
+        const docRef = await addDoc(collection(db, "promo_codes"), newPromo);
         showToast("নতুন প্রমো কোড সফলভাবে যোগ করা হয়েছে!");
+
+        // Update local list optimistically
+        const addedItem: PromoCodeItem = {
+          id: docRef.id,
+          ...newPromo
+        };
+        const updated = [addedItem, ...promoCodes.filter(p => p.id !== docRef.id)];
+        setPromoCodes(updated);
+        try {
+          localStorage.setItem("admin_promo_codes", JSON.stringify(updated));
+        } catch (e) {}
       }
 
       // Reset form
@@ -112,27 +142,30 @@ export const PromoCodeManagement: React.FC = () => {
       setIsEditing(false);
       setCurrentId(null);
     } catch (err: any) {
-      console.warn("Firestore promo save error, using local storage:", err);
+      console.warn("Firestore promo save error, saving to local state:", err);
       // Local fallback
-      const newItem: PromoCodeItem = {
+      const fallbackItem: PromoCodeItem = {
         id: currentId || `promo_${Date.now()}`,
-        code: code.trim().toUpperCase(),
+        code: cleanCode,
         categoryId,
         categoryName: catName,
         discountType,
         discountValue: Number(discountValue),
         minOrderAmount: minOrderAmount ? Number(minOrderAmount) : 0,
         status,
-        createdAt: Date.now()
+        createdAt: now,
+        updatedAt: now
       };
       let updated = [...promoCodes];
       if (currentId) {
-        updated = updated.map(p => p.id === currentId ? newItem : p);
+        updated = updated.map(p => p.id === currentId ? fallbackItem : p);
       } else {
-        updated.unshift(newItem);
+        updated.unshift(fallbackItem);
       }
       setPromoCodes(updated);
-      localStorage.setItem("admin_promo_codes", JSON.stringify(updated));
+      try {
+        localStorage.setItem("admin_promo_codes", JSON.stringify(updated));
+      } catch (e) {}
       showToast("প্রমো কোড সেভ করা হয়েছে!");
 
       setCode("");
@@ -144,6 +177,24 @@ export const PromoCodeManagement: React.FC = () => {
       setIsEditing(false);
       setCurrentId(null);
     }
+  };
+
+  const handleToggleStatus = async (item: PromoCodeItem) => {
+    const nextStatus = item.status === "active" ? "inactive" : "active";
+    try {
+      await updateDoc(doc(db, "promo_codes", item.id), {
+        status: nextStatus,
+        updatedAt: Date.now()
+      });
+      showToast(`প্রমো কোড "${item.code}" ${nextStatus === "active" ? "সক্রিয়" : "নিষ্ক্রিয়"} করা হয়েছে!`);
+    } catch (err) {
+      console.warn("Status toggle error:", err);
+    }
+    const updated = promoCodes.map(p => p.id === item.id ? { ...p, status: nextStatus } : p);
+    setPromoCodes(updated);
+    try {
+      localStorage.setItem("admin_promo_codes", JSON.stringify(updated));
+    } catch (e) {}
   };
 
   const handleEdit = (item: PromoCodeItem) => {
@@ -163,11 +214,14 @@ export const PromoCodeManagement: React.FC = () => {
       await deleteDoc(doc(db, "promo_codes", id));
       showToast("প্রমো কোড সফলভাবে মুছে ফেলা হয়েছে।");
     } catch (err) {
-      const updated = promoCodes.filter(p => p.id !== id);
-      setPromoCodes(updated);
-      localStorage.setItem("admin_promo_codes", JSON.stringify(updated));
+      console.warn("Delete doc error:", err);
       showToast("প্রমো কোড মুছে ফেলা হয়েছে।");
     }
+    const updated = promoCodes.filter(p => p.id !== id);
+    setPromoCodes(updated);
+    try {
+      localStorage.setItem("admin_promo_codes", JSON.stringify(updated));
+    } catch (e) {}
   };
 
   return (
@@ -402,21 +456,36 @@ export const PromoCodeManagement: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+                <div className="flex items-center justify-between gap-2 pt-3 border-t border-gray-100">
                   <button
-                    onClick={() => handleEdit(promo)}
-                    className="p-2 bg-gray-50 hover:bg-gray-100 rounded-xl text-gray-600 transition-colors"
-                    title="এডিট করুন"
+                    onClick={() => handleToggleStatus(promo)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      promo.status === 'active' 
+                        ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' 
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                    title={promo.status === 'active' ? 'ক্লিক করে নিষ্ক্রিয় করুন' : 'ক্লিক করে সক্রিয় করুন'}
                   >
-                    <Edit2 className="w-4 h-4" />
+                    {promo.status === 'active' ? <ToggleRight className="w-4 h-4 text-emerald-600" /> : <ToggleLeft className="w-4 h-4 text-gray-400" />}
+                    <span>{promo.status === 'active' ? 'সক্রিয়' : 'নিষ্ক্রিয়'}</span>
                   </button>
-                  <button
-                    onClick={() => handleDelete(promo.id)}
-                    className="p-2 bg-red-50 hover:bg-red-100 rounded-xl text-red-600 transition-colors"
-                    title="মুছে ফেলুন"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleEdit(promo)}
+                      className="p-2 bg-gray-50 hover:bg-gray-100 rounded-xl text-gray-600 transition-colors"
+                      title="এডিট করুন"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(promo.id)}
+                      className="p-2 bg-red-50 hover:bg-red-100 rounded-xl text-red-600 transition-colors"
+                      title="মুছে ফেলুন"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Truck, MessageSquare, CreditCard, LayoutGrid, RefreshCw, Bell, Mic } from "lucide-react";
+import { Truck, MessageSquare, CreditCard, LayoutGrid, RefreshCw, Bell, Mic, Image as ImageIcon } from "lucide-react";
 import { IntegrationCard } from "./IntegrationCard";
 import { SteadfastConfig } from "./SteadfastConfig";
 import { SmsConfig } from "./SmsConfig";
 import { OneSignalConfig } from "./OneSignalConfig";
 import { ReciterManagement } from "./ReciterManagement";
+import { CategoryManagement } from "./CategoryManagement";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../../lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
@@ -17,7 +18,7 @@ interface IntegrationCenterProps {
 }
 
 export const IntegrationCenter: React.FC<IntegrationCenterProps> = ({ preSelectedUser, clearPreSelectedUser }) => {
-  const [view, setView] = useState<"list" | "steadfast" | "sms" | "onesignal" | "reciter">("list");
+  const [view, setView] = useState<"list" | "steadfast" | "sms" | "onesignal" | "reciter" | "categories">("list");
   const [integrations, setIntegrations] = useState<any>({
     steadfast: { status: "ACTIVE", enabled: true, configured: true },
     sms: { status: "ACTIVE", enabled: true, configured: true },
@@ -136,6 +137,14 @@ export const IntegrationCenter: React.FC<IntegrationCenterProps> = ({ preSelecte
               />
 
               <IntegrationCard 
+                name="Category Management"
+                description="Manage market and service categories, update names and photos."
+                status="ACTIVE"
+                icon={<ImageIcon className="w-6 h-6 text-emerald-500" />}
+                onConfigure={() => setView("categories")}
+              />
+
+              <IntegrationCard 
                 name="Reciter Management"
                 description="Manage Quran reciters, update names, countries and upload photos."
                 status="ACTIVE"
@@ -173,6 +182,16 @@ export const IntegrationCenter: React.FC<IntegrationCenterProps> = ({ preSelecte
           >
             <button onClick={() => setView("list")} className="mb-4 text-blue-600 font-medium">← Back</button>
             <ReciterManagement />
+          </motion.div>
+        ) : view === "categories" ? (
+          <motion.div 
+            key="categories"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <button onClick={() => setView("list")} className="mb-4 text-blue-600 font-medium">← Back</button>
+            <CategoryManagement />
           </motion.div>
         ) : view === "onesignal" ? (
           <motion.div 

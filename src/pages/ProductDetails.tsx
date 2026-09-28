@@ -207,6 +207,8 @@ export const ProductDetails: React.FC = () => {
       name: product.nameBn || product.name || "পণ্য",
       price: Number(product.discountPrice || product.price || 0),
       quantity,
+      categoryId: product.categoryId,
+      categoryName: (product as any).categoryName || (product as any).category || "",
       selectedSize: chosenSize || undefined,
       selectedColor: chosenColor || undefined,
       image: imagesList[activeImageIndex] || product.image || "",

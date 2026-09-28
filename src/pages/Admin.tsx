@@ -4,12 +4,13 @@ import {
   ArrowLeft, Menu, Save, Upload, X, Plus, Tag, CheckCircle2, 
   AlertCircle, Percent, Image as ImageIcon, PackagePlus, 
   Package, Truck, ClipboardList, LayoutDashboard, Settings,
-  LayoutGrid, Users, Download, KeyRound, Copy, Home as HomeIcon, Bell, Mail, Eye, Radio, Mic, Video, Layout, Type, Sparkles, Heart, Wifi
+  LayoutGrid, Users, Download, KeyRound, Copy, Home as HomeIcon, Bell, Mail, Eye, Radio, Mic, Video, Layout, Type, Sparkles, Heart, Wifi, Archive
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../lib/firebase";
 import { collection, addDoc } from "firebase/firestore";
 import { compressImage } from "../lib/imageUtils";
+import { IconManagement } from "../components/admin/IconManagement";
 import { BannerManagement } from "../components/admin/BannerManagement";
 import { ProductManagement } from "../components/admin/ProductManagement";
 import { DeliveryManagement as DeliverySettings } from "../components/admin/DeliveryManagement";
@@ -32,6 +33,7 @@ import { FloatingBubbleAdminSettings } from "../components/admin/FloatingBubbleA
 import { BiodataManagement } from "../components/admin/BiodataManagement";
 import { TelecomManagement } from "../components/admin/TelecomManagement";
 import { PromoCodeManagement } from "../components/admin/PromoCodeManagement";
+import { DownloadCenter } from "../components/admin/DownloadCenter";
 import { useFirestoreCategories } from "../hooks/useCategories";
 import { CustomDropdown } from "../components/CustomDropdown";
 
@@ -58,10 +60,12 @@ OVKwXvSuAXa961yvmxhloAvVNj3PHewurSsi+j//+6+EtA9G5LJmj+1BBhxglwOk
 55HxX8zghz4QKZeBFB07kjohqwXoqPOkqwPoBTpCOEo=
 -----END CERTIFICATE-----`;
 
+const KEYSTORE_BASE64_STRING = "MIIKwgIBAzCCCngGCSqGSIb3DQEHAaCCCmkEggplMIIKYTCCBLIGCSqGSIb3DQEHBqCCBKMwggSfAgEAMIIEmAYJKoZIhvcNAQcBMFcGCSqGSIb3DQEFDTBKMCkGCSqGSIb3DQEFDDAcBAi5K0tXoOLTJAICCAAwDAYIKoZIhvcNAgkFADAdBglghkgBZQMEASoEEPa+9iumZoKs3T0/vE4+qyeAggQwKdlqh9Sz5DcQIKJCdJTA921pmz0nqrOEjFDx1qdRdHVmnPwcLHrl+OoO3LuDiAYFwDYjatJlkuTyJQRJZULhnAyIXNpev01fQZi22g3aUe7g7FPgCJQSFAj7ESNVZ2IVeu7VL/pvdYJRjb3RttdUcFPLwO9hsQotPFv3jSJ1Nsonk/YjRoKoEm6C0g66FIGUYF8Hrig569XNHwGHQ5vpJizybm5cwlM3CMTey5Ll96vx3zU+RmWoeHH6HE83YQAuqj7eScRj1ro6wWOHzLpfkyClGyQHhfN+iRJI0G4hoRXh4yDC7mNeWhprRXF8aLfwig+RP2edEOxcIvmcmZurB1oufDskTlWUmNMi4IKv8k0drVWYLjLIp3ZugyJmkMubnC3X8A59IwZfQwFQkdRmSZFSctV+hDoWp9Qx1hnTsZG5kWgq3WNbJISJMcyJaCbWKuf61qQf272NNG/JzIP+p1Lbj3QlxHFjKwmeeMgSce6f0W2mJuN9KTQ6j378rrt4Q0jmlici9De4TTcZSmooY7BWDn3c/hBVt2B+BWRxTOyJSJ7M2HJVI1wPEuUjaQbdy9uEIYDKte+dnwFc6lNFSvT8eWehaouRgi1h3wDGm//85NIHBQFLCZXocf+OMVaOtUD2S966pArEOadvcv+GR+9eewDzvf3wFbY7jSiBaYk0kA86LrZG3HERiWQpG/1KnObIUG9uTeT3Wc0d9V1AZf6MnhkKkVfCh4e2wDidTpyF56MVZee21TmYwulhc/I3tckMRVMZyIC2nDGgk8ul6SxJg57UdoKppRlEZveDJGN9smATWS0sIl649eRhZwgIscHqJn34x2Ohh28E5QhmqOh0xuzPrK+4m9mcIxxafmSE+hPHikDWhzOAYArD4+7MF3338LLvxrmOGd3lNGaHfI6bZmIOpFmIvjouxs8853nVO9h8tOpUBDC5Ot7ptibnadVXMfULHqqdmUjNHTfdxot2VktLSV34f2lfUO8GtYiakkcohmJwH2IvuKJOw18lhuAV4oV1m+rsjH98uCXHfWcJKuMuc69qdTWO4bXFFTRLvPMfhPdYQeR8C/lUllgMzNAhpIUesSfoaVXhYV+/UCrfEHby2AsqgDt0tQIiZs5lDUOP09c2X7YCLiBbj3Ujh/CAAkzbu+9/6m8Lj5mpeQ6nb7OVzf0qGQluvpDzU3i8qhmZ5ujE6LHkOYD5n7LsT3GU0ADxPgFPPA+BOHC7GEY1U7PSQcTvlosrVy4/KrCOmamFSsXRbli/XVqG1lT49E+Zp6nM3O8rrZ09TDbB6f5cJEVlJrSajyn77JMmKXpAVOlkVWtARoObxajg97+f9m25lsohHjlsmz1AjiJ318Ng5o6zwGm2C9JSfpKdVedX54AXgGPDVM0Lj1kLZWfFG330H8/dMAv36vWfwokiDCCBacGCSqGSIb3DQEHAaCCBZgEggWUMIIFkDCCBYwGCyqGSIb3DQEMCgECoIIFMTCCBS0wVwYJKoZIhvcNAQUNMEowKQYJKoZIhvcNAQUMMBwECMOJU9aM2w22AgIIADAMBggqhkiG9w0CCQUAMB0GCWCGSAFlAwQBKgQQb8mItOcENQO91/WxkTkMgQSCBNALMZYJrhZE7tdUf6+VhZxxM9S+DbPDFgyEBNDe6EKNaPaq4GAczHF9Bj9vM56lwoiynhb4bizmGjgTWBvBgi7+pX3CKP7QNLMeRi+xOQ34Q5ucuWqoBVTQo7ts4O46b/g373E4dSiSOI32APmFZZTXgtQ9qFFsFYwKLsqHhZY2Ax/0eylBX3I5xjFMEvqPy5ANfgAk/27cnOXB9lOFeY2f1a5Et7/bGFc+QVa4iSejeE83iWYQ9+GHpfV2f7kH3z7mWGo/k2muTtNqICGlWsCyh5XJ7DWEO0sBoqgMiUy9GrjHZ0+vnHECs8sc0dLxO+D2RcpZmzyaWyE7Y7pXI3MeR70Ve0Qaa7UFljZpoVCsjNn2Ugk9/Uh6ftsQxW8Qsw8acf6drNbQRr5UFdp6dmdEOiolixh5VC3opmjn1FoV0kzZqvqOR03xTaP973NV9fUY9K5eTMycP3LnMzHHzFJ5oLM+pgNW+KUQTxuR2GsPIywVd9J5kTj9eSSbtrkLW9w7BoFopaZhQWP1AKDIJWW8sDnxY0DMvdr+4gan7Lkk9jBfVomLal6JH9OoBRzeNBcT2UVYeF6YLNyEMQPPEy6789cvkMKFw2wbQfRgElzsNGZyzK4fQfWoCuna9G/qMaq1hRJn03FxAB2fYwcCIAn+yKJqCShuuvlXqrHqtB06AgXsfif9n/WhXrIFFEGertJwop1vtu7JhoqGYRUe1h/Cx9Gy/pI4Pm2gerxLRmQ+xnQY5sReVxajVLVd42L3r2fdiuUt2ciZvkASqA1RFLBY2x70prYvr/lZ5CBZYpJsKS6RFNLd8Y9e6iWE0pFrHO54XJcYcoWMHRkL97rjUJdGcrBmuQORNH+seD/iwl8CeW9+usterrUbISHmlxcg8f4lFxIaPDHfblXkMJyCTS9EdbcXxOYc9lW+Hfvb8scEr51JzfdELid2PoEaxvz4tDHMJoUuuFuKzaotVN7vb3rnu1aYRAjeSvG/3JLv3QlVY/Wb4A0PeTuTvY/gHoaYGeJSrMAhfUSSseDpaI+GAU300bX5qNTSEoe0j5dpsRTkG0feE8IaQaWt9PY6ZXgIgkQvoX9OR/JRsXfF7EVuECGS7qiEc8hV3H3LzOUdqZiqegRMXDH/KmnwfC37J5NNPBdCGG+tlQQ0Z4dD3EX9VIiWLHmCa7KUwU6Y26mRLsR/+0ExDrf317OagWemGYVlGbzRp5E4dKeEj2gpzs+TMRMZ+Pb15+Qg2bgxq0ZdV+AnQs3gcm4WlmxdAEEngknKt6nmCCWxByTyN21+cbEtTWU0FMEfxYdgim0v/Vx9rqFRUmnpjuWQ9sSwyBmD0u08IMIXyJtpWCv3zEuX1svHUzBm5rU1l4Y4SONWwJLc2RKdqmh8YUXH6frB89D4FTDRF6OhrrRlm7OvwlagfFrcfzwFeVr2POUdvZy7qSVoWGWeMsHCq9Va6RzYr+EqybFwcpxx/IvTDpg/hJ8iS+bQFo8SpV9vFYdg9cKuQPM2rPZRu7ieZh4K5OngYI3mk8Mvbq4xJs62fNTlrD5oYKA26Z7XYNQo22eYsaCfFaTHLm2D4OWv+xFUt6LpgMIdAIs5wR69kzbigz82T/nPWwVScI8utZdR2qJPQ8gKd4pjDHDg2TFIMCEGCSqGSIb3DQEJFDEUHhIAYQBsAG0AYQB5AGEAZABpAG4wIwYJKoZIhvcNAQkVMRYEFG1sinX4KHHxI+krywhpsDEVn2ncMEEwMTANBglghkgBZQMEAgEFAAQgBQYo+KQpWuR2GhnRtcW0YDGbInsZoZ8RHeuA2M3wciwECNDK5LbqOZyoAgIIAA==";
+
 export const Admin: React.FC = () => {
   // Navigation Menu State
   const [activeMenu, setActiveMenu] = useState<
-    "all-products" | "add-product" | "promo-codes" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management" | "caption-management" | "matrimonial-management" | "telecom-management"
+    "all-products" | "add-product" | "promo-codes" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "download-center" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management" | "caption-management" | "matrimonial-management" | "telecom-management" | "icon-management"
   >("all-products");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedUserForNotification, setSelectedUserForNotification] = useState<any>(null);
@@ -146,57 +150,36 @@ export const Admin: React.FC = () => {
     showToast("আসল সার্টিফিকেট টেক্সট কপি হয়েছে!");
   };
 
-  const handleDownloadKeystoreFromMemory = async () => {
+  const handleDownloadKeystoreFromMemory = () => {
     try {
-      const res = await fetch("/public/keystore_b64.txt");
-      let b64 = "";
-      if (res.ok) {
-        b64 = (await res.text()).trim();
+      const byteCharacters = atob(KEYSTORE_BASE64_STRING);
+      const byteNumbers = new Uint8Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
       }
-      if (b64) {
-        const byteCharacters = atob(b64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: "application/octet-stream" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "release.keystore";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showToast("✓ release.keystore ডাউনলোড সম্পন্ন হয়েছে!");
-        return;
-      }
+      const blob = new Blob([byteNumbers], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "release.keystore";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("✓ আসল বাইনারি release.keystore ডাউনলোড সম্পন্ন হয়েছে!");
     } catch (err) {
-      console.warn("Client fallback to direct link", err);
+      console.error("Direct memory download error:", err);
+      window.location.href = "/release.keystore";
     }
-    const a = document.createElement("a");
-    a.href = "/api/download-keystore";
-    a.download = "release.keystore";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    showToast("✓ release.keystore ডাউনলোড শুরু হয়েছে!");
   };
 
   const handleCopyKeystoreBase64 = async () => {
     try {
-      const res = await fetch("/public/keystore_b64.txt");
-      if (res.ok) {
-        const b64 = (await res.text()).trim();
-        await navigator.clipboard.writeText(b64);
-        showToast("✓ release.keystore-এর Base64 টেক্সট ক্লিপবোর্ডে কপি হয়েছে (CM_KEYSTORE এর জন্য)!");
-        return;
-      }
+      await navigator.clipboard.writeText(KEYSTORE_BASE64_STRING);
+      showToast("✓ release.keystore-এর Base64 টেক্সট ক্লিপবোর্ডে কপি হয়েছে (Codemagic এর জন্য)!");
     } catch (e) {
-      console.error(e);
+      showToast("কপি করা যায়নি, দয়া করে ফাইলটি ডাউনলোড করুন।", true);
     }
-    showToast("কপি করা যায়নি, দয়া করে ফাইলটি ডাউনলোড করুন।", true);
   };
 
   // Calculate final discounted sale price automatically
@@ -384,6 +367,7 @@ export const Admin: React.FC = () => {
         <div className="max-w-7xl mx-auto px-2 sm:px-4 py-2 flex items-center gap-1.5 min-w-max">
           {[
             { id: "all-products", label: "সকল প্রোডাক্ট", icon: Package },
+            { id: "download-center", label: "ডাউনলোড সেন্টার", icon: Archive },
             { id: "font-management", label: "🔤 ফন্ট ম্যানেজমেন্ট", icon: Type },
             { id: "template-management", label: "টেমপ্লেট লাইব্রেরি", icon: Layout },
             { id: "video-tilawat-management", label: "ভিডিও তেলাওয়াত", icon: Video },
@@ -471,6 +455,15 @@ export const Admin: React.FC = () => {
                   active={activeMenu === "all-products"}
                   onClick={() => {
                     setActiveMenu("all-products");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
+                  icon={<Archive className="text-emerald-600" />}
+                  label="ডাউনলোড সেন্টার"
+                  active={activeMenu === "download-center"}
+                  onClick={() => {
+                    setActiveMenu("download-center");
                     setIsDrawerOpen(false);
                   }}
                 />
@@ -656,6 +649,15 @@ export const Admin: React.FC = () => {
                 />
                 <MenuButton
                   icon={<ImageIcon />}
+                  label="আইকন ম্যানেজমেন্ট"
+                  active={activeMenu === "icon-management"}
+                  onClick={() => {
+                    setActiveMenu("icon-management");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
+                  icon={<ImageIcon />}
                   label="ক্যাটাগরি ফটো"
                   active={activeMenu === "category-icons"}
                   onClick={() => {
@@ -772,6 +774,18 @@ export const Admin: React.FC = () => {
         {/* VIEW 1: ALL PRODUCTS MANAGEMENT (VIEW, EDIT, DELETE) */}
         {activeMenu === "all-products" ? (
           <ProductManagement onNavigateToAddProduct={() => setActiveMenu("add-product")} />
+        ) : activeMenu === "download-center" ? (
+          <div className="w-full max-w-4xl px-2 sm:px-4 py-4">
+            <DownloadCenter 
+              onDownloadKeystore={handleDownloadKeystoreFromMemory}
+              onCopyKeystoreBase64={handleCopyKeystoreBase64}
+              onDownloadCert={handleDownloadCertInMemory}
+            />
+          </div>
+        ) : activeMenu === "icon-management" ? (
+          <div className="w-full max-w-4xl px-2 sm:px-4 py-4">
+            <IconManagement />
+          </div>
         ) : activeMenu === "matrimonial-management" ? (
           <div className="w-full max-w-6xl px-2 sm:px-4 py-4">
             <BiodataManagement />
@@ -1012,12 +1026,12 @@ export const Admin: React.FC = () => {
                   <span>.PEM সার্টিফিকেট</span>
                 </button>
                 <a
-                  href="/download-keystore.html"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg text-gray-800 font-bold transition flex items-center gap-1 cursor-pointer"
+                  href="/release.keystore"
+                  download="release.keystore"
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer"
                 >
-                  <span>আলাদা পেজ</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>release.keystore সরাসরি ডাউনলোড</span>
                 </a>
               </div>
             </div>

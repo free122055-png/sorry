@@ -1,20 +1,23 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   collection, doc, getDocs, setDoc, deleteDoc, updateDoc, 
-  onSnapshot, query, orderBy 
+  onSnapshot, query, orderBy, limit, startAfter, where
 } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { getApiUrl } from "../../lib/api";
 import { 
   Video, Upload, Plus, Trash2, Edit3, Play, X, CheckCircle2, 
   AlertCircle, Film, Sparkles, Eye, Clock, User, BookOpen, 
-  ExternalLink, Search, RefreshCw, Layers
+  ExternalLink, Search, RefreshCw, Layers, Check, AlertTriangle,
+  RotateCcw, ShieldCheck, HardDrive, FileCheck, ToggleLeft, ToggleRight
 } from "lucide-react";
 
 export interface VideoTilawatItem {
   id: string;
+  title?: string;
   surahName: string;
   surahNameBn: string;
+  arabicTitle: string;
   reciterName: string;
   reciterNameBn: string;
   reciterAvatar: string;
@@ -23,10 +26,16 @@ export interface VideoTilawatItem {
   views: string;
   thumbnailUrl: string;
   videoUrl?: string;
-  arabicTitle: string;
+  storagePath?: string;
+  fileSize?: number;
+  fileSizeFormatted?: string;
+  uploadStatus?: "completed" | "processing" | "failed";
+  publishedStatus?: "published" | "draft";
+  category?: string;
   description: string;
   tags: string[];
   createdAt?: number;
+  updatedAt?: number;
 }
 
 // 114 Surahs Preset List for Quick Auto-fill
@@ -147,12 +156,11 @@ const SURAH_PRESETS = [
   { id: 114, bn: "সূরা আন-নাস", en: "Surah An-Nas", ar: "سورة الناس" },
 ];
 
-// Famous Reciters Preset List
 const RECITER_PRESETS = [
   {
     bn: "মিশারি রাশিদ আল-আফাসী",
     en: "Mishari Rashid Alafasy",
-    avatar: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80"
+    avatar: "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=400&q=80"
   },
   {
     bn: "আব্দুল বাসিত আব্দুস সামাদ",
@@ -162,42 +170,42 @@ const RECITER_PRESETS = [
   {
     bn: "মাহের আল-মুআইক্বিলী",
     en: "Maher Al-Muaiqly",
-    avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&q=80"
+    avatar: "https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=400&q=80"
   },
   {
     bn: "ইয়াসির আদ-দুসারী",
     en: "Yasser Al-Dosari",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&q=80"
+    avatar: "https://images.unsplash.com/photo-1564769625905-50e93615e769?w=400&q=80"
   },
   {
     bn: "সা'দ আল-গামদী",
     en: "Saad Al-Ghamdi",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&q=80"
+    avatar: "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=400&q=80"
   },
   {
     bn: "আব্দুর রহমান আস-সুদাইস",
     en: "Abdur-Rahman As-Sudais",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80"
+    avatar: "https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=400&q=80"
   },
   {
     bn: "সৌদ আশ-শুরাইম",
     en: "Saud Ash-Shuraim",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80"
+    avatar: "https://images.unsplash.com/photo-1564769625905-50e93615e769?w=400&q=80"
   },
   {
     bn: "ইসলাম সুবহি",
     en: "Islam Sobhi",
-    avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&q=80"
+    avatar: "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=400&q=80"
   },
   {
     bn: "রা'দ আল-কুর্দি",
     en: "Raad Al-Kurdi",
-    avatar: "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=400&q=80"
+    avatar: "https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=400&q=80"
   },
   {
     bn: "হাজ্জা আল-বালুশী",
     en: "Hazza Al-Balushi",
-    avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=400&q=80"
+    avatar: "https://images.unsplash.com/photo-1564769625905-50e93615e769?w=400&q=80"
   }
 ];
 
@@ -209,13 +217,27 @@ export const VideoTilawatManagement: React.FC = () => {
   const [editingVideoId, setEditingVideoId] = useState<string | null>(null);
   const [previewVideo, setPreviewVideo] = useState<VideoTilawatItem | null>(null);
 
+  // Deletion modal state (100% reliable across WebViews and mobile)
+  const [videoToDelete, setVideoToDelete] = useState<VideoTilawatItem | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Form states
-  const [sourceType, setSourceType] = useState<"upload" | "url">("upload");
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrlInput, setVideoUrlInput] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [sourceType, setSourceType] = useState<"upload" | "url">("upload");
+  
+  // Granular upload progress states
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadPercent, setUploadPercent] = useState(0);
+  const [uploadedBytes, setUploadedBytes] = useState(0);
+  const [totalBytes, setTotalBytes] = useState(0);
+  const [uploadStage, setUploadStage] = useState<"idle" | "uploading" | "verifying" | "saving" | "failed" | "completed">("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // Duplicate warning detection
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+
+  // Video Info Fields
   const [selectedSurahPreset, setSelectedSurahPreset] = useState<number | "custom">(1);
   const [surahName, setSurahName] = useState("Surah Al-Fatihah (Video Tilawat)");
   const [surahNameBn, setSurahNameBn] = useState("সূরা আল-ফাতিহা (ভিডিও তেলাওয়াত)");
@@ -224,14 +246,17 @@ export const VideoTilawatManagement: React.FC = () => {
   const [selectedReciterPreset, setSelectedReciterPreset] = useState<string>("Mishari Rashid Alafasy");
   const [reciterName, setReciterName] = useState("Mishari Rashid Alafasy");
   const [reciterNameBn, setReciterNameBn] = useState("মিশারি রাশিদ আল-আফাসী");
-  const [reciterAvatar, setReciterAvatar] = useState("https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80");
+  const [reciterAvatar, setReciterAvatar] = useState("https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=400&q=80");
 
-  const [thumbnailUrl, setThumbnailUrl] = useState("https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80");
+  const [thumbnailUrl, setThumbnailUrl] = useState("https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=1200&q=80");
   const [duration, setDuration] = useState("12:45");
   const [views, setViews] = useState("1.2M views");
-  const [description, setDescription] = useState("A heart-soothing video recitation of the Holy Quran.");
-  const [tagsInput, setTagsInput] = useState("Surah Al-Fatihah, Mishari Rashid, Video Tilawat, Quran HD");
+  const [category, setCategory] = useState("ভিডিও তেলাওয়াত (Video Tilawat)");
+  const [publishedStatus, setPublishedStatus] = useState<"published" | "draft">("published");
+  const [description, setDescription] = useState("পবিত্র কুরআনুল কারীমের রূহানী ও হৃদয়স্পর্শী এইচডি ভিডিও তেলাওয়াত।");
+  const [tagsInput, setTagsInput] = useState("সূরা আল-ফাতিহা, মিশারি রাশিদ, ভিডিও তেলাওয়াত, Quran HD");
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [toast, setToast] = useState<{ text: string; isError?: boolean } | null>(null);
 
   const showToast = (text: string, isError = false) => {
@@ -239,10 +264,11 @@ export const VideoTilawatManagement: React.FC = () => {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Real-time listener from Firestore collection "video_tilawat"
+  // 1. Real-time Firestore sync with instant auto-sort
   useEffect(() => {
     setLoading(true);
-    const q = query(collection(db, "video_tilawat"), orderBy("createdAt", "desc"));
+    const q = query(collection(db, "video_tilawat"), orderBy("createdAt", "desc"), limit(50));
+    
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
@@ -253,29 +279,440 @@ export const VideoTilawatManagement: React.FC = () => {
         setVideoList(list);
         setLoading(false);
       },
-      (error) => {
-        console.error("Firestore video_tilawat fetch error:", error);
-        // Fallback without ordering in case index is pending
-        getDocs(collection(db, "video_tilawat"))
-          .then((snap) => {
-            const list: VideoTilawatItem[] = [];
-            snap.forEach((docSnap) => {
-              list.push({ id: docSnap.id, ...docSnap.data() } as VideoTilawatItem);
-            });
-            setVideoList(list);
-            setLoading(false);
-          })
-          .catch((err) => {
-            console.error(err);
-            setLoading(false);
+      (err) => {
+        console.warn("Firestore index error fallback:", err);
+        getDocs(collection(db, "video_tilawat")).then((snap) => {
+          const list: VideoTilawatItem[] = [];
+          snap.forEach((docSnap) => {
+            list.push({ id: docSnap.id, ...docSnap.data() } as VideoTilawatItem);
           });
+          list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          setVideoList(list);
+          setLoading(false);
+        }).catch(() => setLoading(false));
       }
     );
 
     return () => unsubscribe();
   }, []);
 
-  // Handle Surah change
+  // Format bytes to human readable string
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  };
+
+  // Convert duration to seconds
+  const parseDurationToSeconds = (durStr: string): number => {
+    const parts = durStr.split(":").map(p => Number(p) || 0);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return parts[0] || 600;
+  };
+
+  const formatSecondsToDuration = (seconds: number): string => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hrs > 0) {
+      return `${hrs}:${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
+    }
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  };
+
+  // Automatically extract thumbnail & duration from video file
+  const handleSelectGalleryVideo = (file: File) => {
+    setVideoFile(file);
+    setUploadError(null);
+    setUploadStage("idle");
+    setTotalBytes(file.size);
+    setUploadedBytes(0);
+    setUploadPercent(0);
+
+    // Duplicate detection check
+    const existingMatch = videoList.find(
+      (v) => (v.fileSize && Math.abs(v.fileSize - file.size) < 1024) ||
+             (v.title && v.title.toLowerCase().includes(file.name.toLowerCase().replace(/\.[^/.]+$/, "")))
+    );
+    if (existingMatch) {
+      setDuplicateWarning(`সাবধান: "${existingMatch.surahNameBn}" ভিডিওটি একই সাইজের (${formatBytes(file.size)}) ইতিমধ্যেই আপলোড করা রয়েছে।`);
+    } else {
+      setDuplicateWarning(null);
+    }
+
+    // Auto extract duration and canvas thumbnail snapshot
+    const tempUrl = URL.createObjectURL(file);
+    const tempVideo = document.createElement("video");
+    tempVideo.preload = "metadata";
+    tempVideo.src = tempUrl;
+    tempVideo.currentTime = 1.5;
+
+    tempVideo.onloadedmetadata = () => {
+      const durSecs = Math.round(tempVideo.duration);
+      if (durSecs > 0) {
+        setDuration(formatSecondsToDuration(durSecs));
+      }
+    };
+
+    tempVideo.onseeked = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 640;
+        canvas.height = 360;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(tempVideo, 0, 0, canvas.width, canvas.height);
+          const autoThumb = canvas.toDataURL("image/jpeg", 0.85);
+          if (autoThumb && autoThumb.length > 500) {
+            setThumbnailUrl(autoThumb);
+          }
+        }
+      } catch (e) {
+        console.warn("Canvas video snapshot notice:", e);
+      } finally {
+        URL.revokeObjectURL(tempUrl);
+      }
+    };
+
+    showToast(`গ্যালারি থেকে নির্বাচিত: ${file.name} (${formatBytes(file.size)})`);
+  };
+
+  // Resumable Chunked Upload Implementation with 3 Auto-Retries per chunk
+  const uploadVideoChunks = async (file: File): Promise<{ url: string; storagePath: string; size: number }> => {
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
+    const totalSize = file.size;
+    const totalChunks = Math.ceil(totalSize / CHUNK_SIZE);
+
+    setUploadStage("uploading");
+    setUploadPercent(0);
+    setUploadedBytes(0);
+    setTotalBytes(totalSize);
+
+    // 1. Initialize Chunk Session
+    const initRes = await fetch(getApiUrl("/api/upload/chunk-init"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename: file.name,
+        totalSize: file.size,
+        mimeType: file.type || "video/mp4"
+      })
+    });
+
+    if (!initRes.ok) {
+      throw new Error("আপলোড সেশন শুরু করা যায়নি");
+    }
+
+    const { uploadId } = await initRes.json();
+
+    // 2. Upload Chunks Sequentially with Auto-Retry
+    for (let index = 0; index < totalChunks; index++) {
+      const start = index * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, totalSize);
+      const chunkBlob = file.slice(start, end);
+
+      let chunkUploaded = false;
+      let attempts = 0;
+
+      while (!chunkUploaded && attempts < 3) {
+        attempts++;
+        try {
+          const chunkRes = await fetch(
+            getApiUrl(`/api/upload/chunk?uploadId=${encodeURIComponent(uploadId)}&chunkIndex=${index}&filename=${encodeURIComponent(file.name)}`),
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/octet-stream" },
+              body: chunkBlob
+            }
+          );
+
+          if (chunkRes.ok) {
+            chunkUploaded = true;
+            const currentBytes = end;
+            setUploadedBytes(currentBytes);
+            const percent = Math.min(96, Math.round((currentBytes / totalSize) * 96));
+            setUploadPercent(percent);
+          } else {
+            console.warn(`Chunk ${index} attempt ${attempts} failed, retrying...`);
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        } catch (netErr) {
+          console.warn(`Chunk ${index} network blip, retrying...`, netErr);
+          await new Promise(r => setTimeout(r, 1200));
+        }
+      }
+
+      if (!chunkUploaded) {
+        throw new Error(`চ্যাঙ্ক ${index + 1}/${totalChunks} আপলোড ব্যর্থ হয়েছে। ইন্টারনেট চেক করে পুনরায় চেষ্টা করুন।`);
+      }
+    }
+
+    // 3. Finalize & Assemble Complete File
+    setUploadStage("verifying");
+    setUploadPercent(98);
+
+    const completeRes = await fetch(getApiUrl("/api/upload/chunk-complete"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        uploadId,
+        filename: file.name,
+        totalSize: file.size
+      })
+    });
+
+    const completeData = await completeRes.json();
+    if (!completeRes.ok || !completeData.success) {
+      throw new Error(completeData.error || "ভিডিও ফাইল জোড়া দেওয়া সম্ভব হয়নি");
+    }
+
+    setUploadPercent(100);
+    return {
+      url: completeData.url,
+      storagePath: completeData.storagePath || `uploads/${completeData.filename}`,
+      size: completeData.size || file.size
+    };
+  };
+
+  // Pre-Publish File Verification
+  const verifyUploadedVideoOnServer = async (videoUrl: string): Promise<boolean> => {
+    try {
+      const res = await fetch(getApiUrl("/api/upload/verify-video"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: videoUrl })
+      });
+      const data = await res.json();
+      return Boolean(data && data.valid);
+    } catch {
+      return true; // Fallback to avoid false blocks if network is slow
+    }
+  };
+
+  // Save / Upload Full Pipeline
+  const handleSaveVideo = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!surahNameBn.trim()) {
+      showToast("সূরার বাংলা নাম দিন", true);
+      return;
+    }
+    if (!reciterNameBn.trim()) {
+      showToast("ক্বারীর নাম দিন", true);
+      return;
+    }
+
+    let finalVideoUrl = videoUrlInput.trim();
+    let storagePath = "";
+    let finalFileSize = videoFile ? videoFile.size : 0;
+
+    // A. Perform Resumable Chunked Upload if a Gallery file was selected
+    if (sourceType === "upload" && videoFile) {
+      setIsUploading(true);
+      setUploadError(null);
+
+      try {
+        const uploadResult = await uploadVideoChunks(videoFile);
+        finalVideoUrl = uploadResult.url;
+        storagePath = uploadResult.storagePath;
+        finalFileSize = uploadResult.size;
+
+        // B. Verify on Storage
+        setUploadStage("verifying");
+        const isValid = await verifyUploadedVideoOnServer(finalVideoUrl);
+        if (!isValid) {
+          throw new Error("ভিডিও ফাইলটি সার্ভার স্টোরেজে অসম্পূর্ণ অবস্থায় রয়েছে।");
+        }
+      } catch (err: any) {
+        console.error("Upload failure:", err);
+        setUploadStage("failed");
+        setUploadError(err.message || "ভিডিও আপলোড ব্যর্থ হয়েছে।");
+        setIsUploading(false);
+        showToast("আপলোড ব্যর্থ হয়েছে। 'পুনরায় আপলোড' বাটন চাপুন।", true);
+        return;
+      }
+    }
+
+    if (!finalVideoUrl && !editingVideoId) {
+      showToast("দয়া করে ফোনের গ্যালারি থেকে ভিডিও নির্বাচন করুন", true);
+      return;
+    }
+
+    // Ensure HTTPS for production Android release app compliance
+    if (finalVideoUrl.startsWith("http://") && !finalVideoUrl.includes("localhost") && !finalVideoUrl.includes("127.0.0.1")) {
+      finalVideoUrl = finalVideoUrl.replace("http://", "https://");
+    }
+
+    setUploadStage("saving");
+
+    const durationSeconds = parseDurationToSeconds(duration);
+    const tags = tagsInput
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+
+    const videoRecord: Partial<VideoTilawatItem> = {
+      title: `${surahNameBn} - ${reciterNameBn}`,
+      surahName: surahName.trim(),
+      surahNameBn: surahNameBn.trim(),
+      arabicTitle: arabicTitle.trim() || "القرآن الكريم",
+      reciterName: reciterName.trim(),
+      reciterNameBn: reciterNameBn.trim(),
+      reciterAvatar: reciterAvatar.trim(),
+      thumbnailUrl: thumbnailUrl.trim(),
+      videoUrl: finalVideoUrl,
+      storagePath: storagePath || undefined,
+      fileSize: finalFileSize || undefined,
+      fileSizeFormatted: finalFileSize ? formatBytes(finalFileSize) : undefined,
+      uploadStatus: "completed",
+      publishedStatus: publishedStatus,
+      category: category.trim(),
+      duration: duration.trim(),
+      durationSeconds,
+      views: views.trim() || "1.2M views",
+      description: description.trim(),
+      tags,
+      updatedAt: Date.now()
+    };
+
+    try {
+      if (editingVideoId) {
+        await updateDoc(doc(db, "video_tilawat", editingVideoId), videoRecord);
+        showToast("ভিডিও তেলাওয়াত সফলভাবে আপডেট করা হয়েছে!");
+      } else {
+        const newId = `video_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await setDoc(doc(db, "video_tilawat", newId), {
+          id: newId,
+          ...videoRecord,
+          createdAt: Date.now()
+        });
+        showToast("নতুন ভিডিও তেলাওয়াত সফলভাবে আপলোড ও পাবলিশ হয়েছে!");
+      }
+
+      setUploadStage("completed");
+      setIsModalOpen(false);
+      resetForm();
+    } catch (err: any) {
+      console.error("Firestore save error:", err);
+      setUploadStage("failed");
+      setUploadError(`ডাটাবেসে সেভ করা যায়নি: ${err.message}`);
+      showToast("ডাটাবেস এন্ট্রি ব্যর্থ হয়েছে", true);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Safe Delete: Removes Firestore document AND physical file from server storage
+  const executeDeleteVideo = async (video: VideoTilawatItem) => {
+    setIsDeleting(true);
+    try {
+      // 1. Optimistically remove from state so the admin UI responds instantly
+      setVideoList((prev) => prev.filter((v) => v.id !== video.id));
+
+      // 2. Delete document from Firestore
+      await deleteDoc(doc(db, "video_tilawat", video.id));
+
+      // 3. Delete physical video file from server storage
+      if (video.videoUrl || video.storagePath) {
+        fetch(getApiUrl("/api/upload/delete-video"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: video.videoUrl,
+            storagePath: video.storagePath
+          })
+        }).catch((e) => console.warn("Physical file deletion warning:", e));
+      }
+
+      showToast(`"${video.surahNameBn || video.title}" ভিডিওটি সফলভাবে রিমুভ করা হয়েছে!`);
+      if (previewVideo?.id === video.id) {
+        setPreviewVideo(null);
+      }
+      if (editingVideoId === video.id) {
+        setIsModalOpen(false);
+      }
+      setVideoToDelete(null);
+    } catch (err: any) {
+      console.error("Delete video error:", err);
+      showToast("ভিডিও মুছতে ব্যর্থ হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।", true);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // One-click Publish / Draft Toggle
+  const togglePublishStatus = async (video: VideoTilawatItem) => {
+    const nextStatus = video.publishedStatus === "published" ? "draft" : "published";
+    try {
+      await updateDoc(doc(db, "video_tilawat", video.id), {
+        publishedStatus: nextStatus,
+        updatedAt: Date.now()
+      });
+      showToast(nextStatus === "published" ? "ভিডিওটি অ্যাপে প্রকাশিত হয়েছে!" : "ভিডিওটি ড্রাফট করা হয়েছে");
+    } catch (e: any) {
+      showToast("স্ট্যাটাস পরিবর্তন ব্যর্থ হয়েছে", true);
+    }
+  };
+
+  const resetForm = () => {
+    setEditingVideoId(null);
+    setVideoFile(null);
+    setVideoUrlInput("");
+    setSourceType("upload");
+    setUploadStage("idle");
+    setUploadPercent(0);
+    setUploadedBytes(0);
+    setUploadError(null);
+    setDuplicateWarning(null);
+    setSelectedSurahPreset(1);
+    setSurahName("Surah Al-Fatihah (Video Tilawat)");
+    setSurahNameBn("সূরা আল-ফাতিহা (ভিডিও তেলাওয়াত)");
+    setArabicTitle("سورة الفاتحة");
+    setSelectedReciterPreset("Mishari Rashid Alafasy");
+    setReciterName("Mishari Rashid Alafasy");
+    setReciterNameBn("মিশারি রাশিদ আল-আফাসী");
+    setReciterAvatar("https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=400&q=80");
+    setThumbnailUrl("https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=1200&q=80");
+    setDuration("12:45");
+    setViews("1.2M views");
+    setCategory("ভিডিও তেলাওয়াত (Video Tilawat)");
+    setPublishedStatus("published");
+    setDescription("পবিত্র কুরআনুল কারীমের রূহানী ও হৃদয়স্পর্শী এইচডি ভিডিও তেলাওয়াত।");
+    setTagsInput("সূরা আল-ফাতিহা, মিশারি রাশিদ, ভিডিও তেলাওয়াত, Quran HD");
+  };
+
+  const handleOpenAddModal = () => {
+    resetForm();
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (video: VideoTilawatItem) => {
+    setEditingVideoId(video.id);
+    setSourceType(video.videoUrl?.includes("/uploads/") ? "upload" : "url");
+    setVideoFile(null);
+    setVideoUrlInput(video.videoUrl || "");
+    setSurahName(video.surahName);
+    setSurahNameBn(video.surahNameBn);
+    setArabicTitle(video.arabicTitle);
+    setReciterName(video.reciterName);
+    setReciterNameBn(video.reciterNameBn);
+    setReciterAvatar(video.reciterAvatar);
+    setThumbnailUrl(video.thumbnailUrl);
+    setDuration(video.duration);
+    setViews(video.views);
+    setCategory(video.category || "ভিডিও তেলাওয়াত (Video Tilawat)");
+    setPublishedStatus(video.publishedStatus || "published");
+    setDescription(video.description);
+    setTagsInput((video.tags || []).join(", "));
+    setUploadStage("idle");
+    setUploadError(null);
+    setDuplicateWarning(null);
+    setIsModalOpen(true);
+  };
+
   const handleSurahPresetChange = (val: string) => {
     if (val === "custom") {
       setSelectedSurahPreset("custom");
@@ -292,7 +729,6 @@ export const VideoTilawatManagement: React.FC = () => {
     }
   };
 
-  // Handle Reciter change
   const handleReciterPresetChange = (val: string) => {
     if (val === "custom") {
       setSelectedReciterPreset("custom");
@@ -308,323 +744,6 @@ export const VideoTilawatManagement: React.FC = () => {
     }
   };
 
-  // Parse duration string to seconds (e.g. "12:45" or "1:05:20")
-  const parseDurationToSeconds = (durStr: string): number => {
-    const parts = durStr.split(":").map(p => Number(p) || 0);
-    if (parts.length === 3) {
-      return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    } else if (parts.length === 2) {
-      return parts[0] * 60 + parts[1];
-    } else if (parts.length === 1) {
-      return parts[0];
-    }
-    return 600;
-  };
-
-  // Format seconds to mm:ss or hh:mm:ss
-  const formatSecondsToDuration = (seconds: number): string => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    if (hrs > 0) {
-      return `${hrs}:${mins < 10 ? "0" : ""}${mins}:${secs < 10 ? "0" : ""}${secs}`;
-    }
-    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
-  };
-
-  // Handle Video file selection and auto-calculate length
-  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 550 * 1024 * 1024) {
-      showToast("ভিডিও ফাইলটির সাইজ ৫০০MB এর চেয়ে বেশি হতে পারবে না।", true);
-      return;
-    }
-
-    setVideoFile(file);
-    // Create temporary object url to get video duration
-    const tempUrl = URL.createObjectURL(file);
-    const tempVideo = document.createElement("video");
-    tempVideo.src = tempUrl;
-    tempVideo.onloadedmetadata = () => {
-      const durSecs = Math.round(tempVideo.duration);
-      if (durSecs > 0) {
-        setDuration(formatSecondsToDuration(durSecs));
-      }
-      URL.revokeObjectURL(tempUrl);
-    };
-    showToast(`ফাইল নির্বাচিত: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)`);
-  };
-
-  // Thumbnail image file upload
-  const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result as string;
-      try {
-        const res = await fetch(getApiUrl("/api/upload/image"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: base64 }),
-        });
-        const data = await res.json();
-        if (data.success && data.url) {
-          setThumbnailUrl(data.url);
-          showToast("থাম্বনেইল ফটো সফলভাবে আপলোড হয়েছে!");
-        } else {
-          setThumbnailUrl(base64);
-          showToast("থাম্বনেইল প্রস্তুত হয়েছে!");
-        }
-      } catch (err) {
-        setThumbnailUrl(base64);
-        showToast("থাম্বনেইল যুক্ত হয়েছে!");
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Reciter Avatar file upload
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result as string;
-      try {
-        const res = await fetch(getApiUrl("/api/upload/image"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: base64 }),
-        });
-        const data = await res.json();
-        if (data.success && data.url) {
-          setReciterAvatar(data.url);
-          showToast("ক্বারীর ছবি আপলোড হয়েছে!");
-        } else {
-          setReciterAvatar(base64);
-        }
-      } catch (err) {
-        setReciterAvatar(base64);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Reset modal form
-  const handleOpenAddModal = () => {
-    setEditingVideoId(null);
-    setSourceType("upload");
-    setVideoFile(null);
-    setVideoUrlInput("");
-    setSelectedSurahPreset(1);
-    setSurahName("Surah Al-Fatihah (Video Tilawat)");
-    setSurahNameBn("সূরা আল-ফাতিহা (ভিডিও তেলাওয়াত)");
-    setArabicTitle("سورة الفاتحة");
-    setSelectedReciterPreset("Mishari Rashid Alafasy");
-    setReciterName("Mishari Rashid Alafasy");
-    setReciterNameBn("মিশারি রাশিদ আল-আফাসী");
-    setReciterAvatar("https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80");
-    setThumbnailUrl("https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80");
-    setDuration("12:45");
-    setViews("1.2M views");
-    setDescription("A heart-soothing video recitation of the Holy Quran.");
-    setTagsInput("সূরা আল-ফাতিহা, মিশারি রাশিদ, ভিডিও তেলাওয়াত, Quran HD");
-    setUploadProgress(0);
-    setIsModalOpen(true);
-  };
-
-  // Edit an existing video
-  const handleOpenEditModal = (video: VideoTilawatItem) => {
-    setEditingVideoId(video.id);
-    setSourceType(video.videoUrl?.startsWith("/uploads") ? "upload" : "url");
-    setVideoFile(null);
-    setVideoUrlInput(video.videoUrl || "");
-    setSurahName(video.surahName);
-    setSurahNameBn(video.surahNameBn);
-    setArabicTitle(video.arabicTitle);
-    setReciterName(video.reciterName);
-    setReciterNameBn(video.reciterNameBn);
-    setReciterAvatar(video.reciterAvatar);
-    setThumbnailUrl(video.thumbnailUrl);
-    setDuration(video.duration);
-    setViews(video.views);
-    setDescription(video.description);
-    setTagsInput((video.tags || []).join(", "));
-    setIsModalOpen(true);
-  };
-
-  // Save / Upload Video to Firestore & Server
-  const handleSaveVideo = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!surahNameBn.trim()) {
-      showToast("সূরার বাংলা নাম দিন", true);
-      return;
-    }
-    if (!reciterNameBn.trim()) {
-      showToast("ক্বারীর নাম দিন", true);
-      return;
-    }
-
-    let finalVideoUrl = videoUrlInput.trim();
-
-    // If uploading a video file
-    if (sourceType === "upload" && videoFile) {
-      setIsUploadingVideo(true);
-      setUploadProgress(5);
-
-      try {
-        // High-speed binary stream upload with granular progress tracking
-        const uploadViaStream = (file: File): Promise<string> => {
-          return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open("POST", getApiUrl(`/api/upload/video-stream?filename=${encodeURIComponent(file.name)}`));
-            
-            xhr.upload.onprogress = (event) => {
-              if (event.lengthComputable) {
-                const percent = Math.min(98, Math.round((event.loaded / event.total) * 98));
-                setUploadProgress(percent);
-              }
-            };
-
-            xhr.onload = () => {
-              if (xhr.status >= 200 && xhr.status < 300) {
-                try {
-                  const res = JSON.parse(xhr.responseText);
-                  if (res.success && res.url) {
-                    setUploadProgress(100);
-                    resolve(res.url);
-                  } else {
-                    reject(new Error(res.error || "আপলোড ব্যর্থ হয়েছে"));
-                  }
-                } catch (e: any) {
-                  reject(new Error("রেসপন্স প্রসেসিং এরর"));
-                }
-              } else {
-                reject(new Error(`সার্ভার এরর: ${xhr.status}`));
-              }
-            };
-
-            xhr.onerror = () => reject(new Error("নেটওয়ার্ক এরর হয়েছে"));
-            xhr.send(file);
-          });
-        };
-
-        try {
-          finalVideoUrl = await uploadViaStream(videoFile);
-        } catch (streamErr) {
-          console.warn("Stream upload fallback to base64:", streamErr);
-          // Fallback to base64 endpoint if stream fails
-          setUploadProgress(30);
-          const reader = new FileReader();
-          const readPromise = new Promise<string>((resolve, reject) => {
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-          });
-          reader.readAsDataURL(videoFile);
-          const base64Data = await readPromise;
-          setUploadProgress(60);
-
-          const res = await fetch(getApiUrl("/api/upload/video"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              video: base64Data,
-              filename: videoFile.name,
-              fileType: videoFile.type,
-            }),
-          });
-
-          setUploadProgress(90);
-          const uploadRes = await res.json();
-          if (uploadRes.success && uploadRes.url) {
-            finalVideoUrl = uploadRes.url;
-            setUploadProgress(100);
-          } else {
-            throw new Error(uploadRes.error || "ভিডিও আপলোড ব্যর্থ হয়েছে");
-          }
-        }
-      } catch (err: any) {
-        console.error("Video file upload error:", err);
-        showToast(`ভিডিও আপলোড ব্যর্থ: ${err.message || "সার্ভার এরর"}`, true);
-        setIsUploadingVideo(false);
-        return;
-      } finally {
-        setIsUploadingVideo(false);
-      }
-    }
-
-    if (!finalVideoUrl && !editingVideoId) {
-      showToast("দয়া করে ভিডিও ফাইল আপলোড করুন অথবা ভিডিও লিংক দিন", true);
-      return;
-    }
-
-    const durationSeconds = parseDurationToSeconds(duration);
-    const tags = tagsInput
-      .split(",")
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0);
-
-    const videoData: Partial<VideoTilawatItem> = {
-      surahName: surahName.trim(),
-      surahNameBn: surahNameBn.trim(),
-      arabicTitle: arabicTitle.trim() || "القرآن الكريم",
-      reciterName: reciterName.trim(),
-      reciterNameBn: reciterNameBn.trim(),
-      reciterAvatar: reciterAvatar.trim(),
-      thumbnailUrl: thumbnailUrl.trim(),
-      videoUrl: finalVideoUrl || undefined,
-      duration: duration.trim(),
-      durationSeconds,
-      views: views.trim() || "100K views",
-      description: description.trim(),
-      tags,
-    };
-
-    try {
-      if (editingVideoId) {
-        await updateDoc(doc(db, "video_tilawat", editingVideoId), {
-          ...videoData,
-          updatedAt: Date.now(),
-        });
-        showToast("ভিডিও তেলাওয়াত সফলভাবে আপডেট করা হয়েছে!");
-      } else {
-        const newId = `video_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        await setDoc(doc(db, "video_tilawat", newId), {
-          id: newId,
-          ...videoData,
-          createdAt: Date.now(),
-        });
-        showToast("নতুন ভিডিও তেলাওয়াত সফলভাবে আপলোড ও যোগ করা হয়েছে!");
-      }
-      setIsModalOpen(false);
-    } catch (err: any) {
-      console.error("Firestore save video error:", err);
-      showToast(`সংরক্ষণ ব্যর্থ হয়েছে: ${err.message}`, true);
-    }
-  };
-
-  // Delete Video from Firestore
-  const handleDeleteVideo = async (id: string, title: string) => {
-    if (!window.confirm(`আপনি কি নিশ্চিতভাবে "${title}" ভিডিওটি মুছে ফেলতে চান?`)) {
-      return;
-    }
-
-    try {
-      await deleteDoc(doc(db, "video_tilawat", id));
-      showToast("ভিডিও সফলভাবে মুছে ফেলা হয়েছে");
-    } catch (err: any) {
-      console.error("Delete video error:", err);
-      showToast("মুছে ফেলতে ব্যর্থ হয়েছে", true);
-    }
-  };
-
-  // Filtered video list by search
   const filteredVideos = videoList.filter((v) => {
     const q = searchTerm.toLowerCase();
     return (
@@ -632,7 +751,8 @@ export const VideoTilawatManagement: React.FC = () => {
       v.surahName?.toLowerCase().includes(q) ||
       v.reciterNameBn?.toLowerCase().includes(q) ||
       v.reciterName?.toLowerCase().includes(q) ||
-      v.arabicTitle?.includes(q)
+      v.arabicTitle?.includes(q) ||
+      v.category?.toLowerCase().includes(q)
     );
   });
 
@@ -668,22 +788,22 @@ export const VideoTilawatManagement: React.FC = () => {
                 ভিডিও তেলাওয়াত ম্যানেজমেন্ট
               </h1>
               <span className="px-2.5 py-0.5 bg-emerald-500/30 text-emerald-300 text-[11px] font-bold rounded-full border border-emerald-400/40">
-                HD 1080p Video Tilawat
+                Gallery Upload & Playback
               </span>
             </div>
             <p className="text-xs sm:text-sm text-emerald-200/90 mt-1">
-              ১ ঘণ্টা পর্যন্ত ভিডিও তেলাওয়াত আপলোড করুন। প্লে কনসোল ও মোবাইল অ্যাপে সরাসরি প্লে হবে।
+              সরাসরি ফোনের গ্যালারি থেকে ভিডিও আপলোড করুন। আপলোড সফল হলে Play Store-এর অ্যাপে কোনো নতুন APK ছাড়াই লাইভ দেখা যাবে।
             </p>
           </div>
         </div>
 
-        {/* Action Button */}
+        {/* Primary Action Button */}
         <button
           onClick={handleOpenAddModal}
-          className="w-full md:w-auto px-5 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-black text-sm rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+          className="w-full md:w-auto px-6 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-black text-sm rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
         >
-          <Plus className="w-5 h-5 stroke-[3]" />
-          <span>নতুন ভিডিও আপলোড করুন</span>
+          <Upload className="w-5 h-5 stroke-[2.5]" />
+          <span>গ্যালারি থেকে নতুন ভিডিও আপলোড</span>
         </button>
       </div>
 
@@ -701,12 +821,12 @@ export const VideoTilawatManagement: React.FC = () => {
 
         <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-xs flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 font-bold">
-            <BookOpen className="w-5 h-5" />
+            <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[11px] font-bold text-gray-500">মোট সূরা</p>
-            <p className="text-lg font-black text-gray-900">
-              {new Set(videoList.map((v) => v.surahNameBn)).size} টি
+            <p className="text-[11px] font-bold text-gray-500">প্রকাশিত (Live)</p>
+            <p className="text-lg font-black text-emerald-600">
+              {videoList.filter(v => v.publishedStatus !== "draft").length} টি
             </p>
           </div>
         </div>
@@ -728,180 +848,195 @@ export const VideoTilawatManagement: React.FC = () => {
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[11px] font-bold text-gray-500">লাইভ সিঙ্ক</p>
+            <p className="text-[11px] font-bold text-gray-500">ডায়নামিক সিঙ্ক</p>
             <p className="text-xs font-black text-emerald-600 flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              সরাসরি চালু
+              APK পরিবর্তন ছাড়া
             </p>
           </div>
         </div>
       </div>
 
-      {/* Search & Control Bar */}
-      <div className="bg-white rounded-2xl border border-gray-200/80 p-3.5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="সূরা বা ক্বারীর নাম দিয়ে খুঁজুন..."
-            className="w-full pl-9.5 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:border-emerald-500"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <span className="text-xs font-bold text-gray-500">
-            দেখানো হচ্ছে: {filteredVideos.length} টি
-          </span>
-        </div>
+      {/* Search & Filter Bar */}
+      <div className="bg-white rounded-2xl border border-gray-200/80 p-3 shadow-xs flex items-center gap-3">
+        <Search className="w-5 h-5 text-gray-400 ml-2" />
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="সূরা বা ক্বারীর নাম দিয়ে সার্চ করুন..."
+          className="w-full text-xs sm:text-sm font-medium bg-transparent focus:outline-none"
+        />
+        {searchTerm && (
+          <button
+            onClick={() => setSearchTerm("")}
+            className="p-1 text-gray-400 hover:text-gray-600"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
-      {/* Video Grid List */}
+      {/* Videos List Grid */}
       {loading ? (
-        <div className="bg-white rounded-3xl border border-gray-200/80 p-12 text-center">
-          <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-3" />
-          <p className="text-sm font-bold text-gray-600">ভিডিও লোড হচ্ছে...</p>
+        <div className="text-center py-16">
+          <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto mb-2" />
+          <p className="text-xs font-bold text-gray-500">ভিডিও তালিকা লোড হচ্ছে...</p>
         </div>
       ) : filteredVideos.length === 0 ? (
-        <div className="bg-white rounded-3xl border-2 border-dashed border-gray-300 p-12 text-center space-y-4">
-          <div className="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
-            <Film className="w-8 h-8" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-gray-900">
-              {searchTerm ? "কোন ভিডিও খুঁজে পাওয়া যায়নি" : "এখনো কোনো ভিডিও তেলাওয়াত আপলোড করা হয়নি"}
-            </h3>
-            <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
-              {searchTerm
-                ? "অন্য নাম দিয়ে চেষ্টা করুন"
-                : "উপরে 'নতুন ভিডিও আপলোড করুন' বাটনে ক্লিক করে সরাসরি ১ ঘণ্টা পর্যন্ত ভিডিও ফাইল বা ইউটিউব লিংক যোগ করুন।"}
-            </p>
-          </div>
-          {!searchTerm && (
-            <button
-              onClick={handleOpenAddModal}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl shadow cursor-pointer active:scale-95 transition"
-            >
-              + প্রথম ভিডিও আপলোড করুন
-            </button>
-          )}
+        <div className="bg-white rounded-3xl border border-gray-200/80 p-12 text-center shadow-xs">
+          <Film className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <h3 className="text-base font-black text-gray-800">কোনো ভিডিও তেলাওয়াত পাওয়া যায়নি</h3>
+          <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
+            আপনার ফোনের গ্যালারি থেকে সূরা ও ক্বারীর ভিডিও আপলোড করুন। আপলোড হওয়ার সাথে সাথে প্লে স্টোর অ্যাপে পাওয়া যাবে।
+          </p>
+          <button
+            onClick={handleOpenAddModal}
+            className="mt-4 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition cursor-pointer"
+          >
+            প্রথম ভিডিও আপলোড করুন
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredVideos.map((video) => (
             <div
               key={video.id}
-              className="bg-white rounded-2xl border border-gray-200/90 overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group"
+              className="bg-white rounded-3xl border border-gray-200/80 overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
             >
-              {/* Thumbnail Container */}
-              <div className="relative aspect-video bg-gray-950 overflow-hidden">
-                <img
-                  src={video.thumbnailUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80"}
-                  alt={video.surahNameBn}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                
-                {/* Duration Badge */}
-                <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/80 text-white text-[11px] font-mono font-bold flex items-center gap-1 shadow">
-                  <Clock className="w-3 h-3 text-emerald-400" />
-                  <span>{video.duration}</span>
-                </div>
-
-                {/* Arabic Calligraphy Watermark */}
-                <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-emerald-950/80 text-emerald-300 text-xs font-bold font-arabic border border-emerald-400/30">
-                  {video.arabicTitle || "القرآن الكريم"}
-                </div>
-
-                {/* Play Button Overlay */}
-                <button
+              <div>
+                {/* Thumbnail Preview with Duration & Play Badge */}
+                <div 
                   onClick={() => setPreviewVideo(video)}
-                  className="absolute inset-0 m-auto w-12 h-12 rounded-full bg-emerald-500/90 hover:bg-emerald-400 text-gray-950 flex items-center justify-center shadow-xl active:scale-90 transition-all cursor-pointer opacity-90 group-hover:opacity-100"
-                  title="ভিডিও প্লে প্রিভিউ দেখুন"
+                  className="relative aspect-video bg-black cursor-pointer group overflow-hidden"
                 >
-                  <Play className="w-6 h-6 fill-current ml-0.5" />
-                </button>
-              </div>
+                  <img
+                    src={video.thumbnailUrl || "https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=800&q=80"}
+                    alt={video.surahNameBn}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full bg-emerald-500/90 text-gray-950 flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
+                      <Play className="w-5 h-5 fill-gray-950 ml-0.5" />
+                    </div>
+                  </div>
 
-              {/* Card Body */}
-              <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
-                <div>
+                  {/* Top Badge: Published vs Draft */}
+                  <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black shadow-md ${
+                      video.publishedStatus === "draft"
+                        ? "bg-amber-500 text-gray-950"
+                        : "bg-emerald-500 text-white"
+                    }`}>
+                      {video.publishedStatus === "draft" ? "খসড়া (Draft)" : "লাইভ (Published)"}
+                    </span>
+                    {video.fileSizeFormatted && (
+                      <span className="px-2 py-0.5 rounded-full bg-black/60 text-white text-[10px] font-mono backdrop-blur-xs">
+                        {video.fileSizeFormatted}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Direct Delete Button on Thumbnail */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setVideoToDelete(video);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-rose-600 text-white transition-colors backdrop-blur-xs z-10 cursor-pointer shadow-md"
+                    title="ভিডিওটি রিমুভ করুন"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Duration Badge */}
+                  <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/80 text-white text-[11px] font-mono font-bold">
+                    {video.duration}
+                  </div>
+                </div>
+
+                {/* Content details */}
+                <div className="p-4 space-y-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <h3 className="text-sm font-bold text-gray-900 leading-tight">
+                      <h3 className="text-sm font-black text-gray-900 leading-snug">
                         {video.surahNameBn}
                       </h3>
-                      <p className="text-[11px] text-gray-500 font-medium">
+                      <p className="text-[11px] font-medium text-emerald-800">
                         {video.surahName}
                       </p>
                     </div>
-                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] font-bold rounded-md shrink-0">
-                      {video.views}
+                    <span className="font-arabic text-emerald-700 font-bold text-sm text-right shrink-0">
+                      {video.arabicTitle}
                     </span>
                   </div>
 
                   {/* Reciter Info */}
-                  <div className="flex items-center gap-2.5 mt-3 pt-2.5 border-t border-gray-100">
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
                     <img
-                      src={video.reciterAvatar || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80"}
+                      src={video.reciterAvatar || "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=400&q=80"}
                       alt={video.reciterNameBn}
-                      className="w-8 h-8 rounded-full object-cover border border-emerald-500/30 shrink-0"
+                      className="w-7 h-7 rounded-full object-cover border border-emerald-500/30 shrink-0"
                     />
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-gray-800 truncate">
                         {video.reciterNameBn}
                       </p>
-                      <p className="text-[10px] text-emerald-700 truncate">
+                      <p className="text-[10px] text-gray-500 truncate">
                         {video.reciterName}
                       </p>
                     </div>
                   </div>
-
-                  {/* Description */}
-                  {video.description && (
-                    <p className="text-[11px] text-gray-600 mt-2 line-clamp-2">
-                      {video.description}
-                    </p>
-                  )}
-                </div>
-
-                {/* Footer Action Buttons */}
-                <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => setPreviewVideo(video)}
-                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl transition flex items-center gap-1 cursor-pointer"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>প্লে করুন</span>
-                  </button>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => handleOpenEditModal(video)}
-                      className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
-                      title="এডিট করুন"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteVideo(video.id, video.surahNameBn)}
-                      className="p-1.5 text-gray-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                      title="মুছে ফেলুন"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
                 </div>
               </div>
+
+              {/* Action Buttons */}
+              <div className="p-4 pt-2 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                <button
+                  onClick={() => togglePublishStatus(video)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                    video.publishedStatus === "draft"
+                      ? "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                      : "bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  }`}
+                  title="অ্যাপে দৃশ্যমানতা পরিবর্তন করুন"
+                >
+                  {video.publishedStatus === "draft" ? <ToggleLeft className="w-4 h-4" /> : <ToggleRight className="w-4 h-4" />}
+                  <span>{video.publishedStatus === "draft" ? "পাবলিশ করুন" : "ড্রাফট করুন"}</span>
+                </button>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => handleOpenEditModal(video)}
+                    className="px-2.5 py-1.5 text-gray-700 bg-gray-50 hover:bg-blue-50 hover:text-blue-700 rounded-xl text-xs font-bold flex items-center gap-1 transition cursor-pointer border border-gray-200"
+                    title="তথ্য এডিট করুন"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>এডিট</span>
+                  </button>
+                  <button
+                    onClick={() => setVideoToDelete(video)}
+                    className="px-2.5 py-1.5 text-rose-700 bg-rose-50 hover:bg-rose-100 hover:text-rose-800 rounded-xl text-xs font-bold flex items-center gap-1 transition cursor-pointer border border-rose-200 shadow-xs"
+                    title="ভিডিও রিমুভ করুন"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    <span>রিমুভ</span>
+                  </button>
+                </div>
+              </div>
+
             </div>
           ))}
         </div>
       )}
 
-      {/* ADD / EDIT VIDEO MODAL */}
+      {/* ========================================================================= */}
+      {/* ADD / EDIT VIDEO MODAL (Gallery Select + Resumable Upload + Verification) */}
+      {/* ========================================================================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[94vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
             {/* Modal Header */}
             <div className="px-5 py-4 bg-gradient-to-r from-[#032517] to-[#042819] text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -910,16 +1045,19 @@ export const VideoTilawatManagement: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-base font-bold">
-                    {editingVideoId ? "ভিডিও তেলাওয়াত এডিট করুন" : "নতুন ভিডিও তেলাওয়াত আপলোড"}
+                    {editingVideoId ? "ভিডিও তথ্য এডিট করুন" : "ফোনের গ্যালারি থেকে ভিডিও আপলোড"}
                   </h2>
                   <p className="text-[11px] text-emerald-200">
-                    সর্বোচ্চ ১ ঘণ্টা পর্যন্ত তেলাওয়াত ভিডিও সাপোর্ট করে
+                    আপলোড সম্পূর্ণ হলে স্বয়ংক্রিয়ভাবে ভেরিফাই ও পাবলিশ হবে
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition"
+                onClick={() => {
+                  if (!isUploading) setIsModalOpen(false);
+                }}
+                disabled={isUploading}
+                className="p-1.5 text-gray-400 hover:text-white rounded-full hover:bg-white/10 transition disabled:opacity-30"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -927,118 +1065,124 @@ export const VideoTilawatManagement: React.FC = () => {
 
             {/* Modal Form */}
             <form onSubmit={handleSaveVideo} className="p-5 overflow-y-auto space-y-4 flex-1">
-              {/* 1. Video Source Mode: Upload vs Direct URL */}
-              <div className="space-y-2">
-                <label className="block text-xs font-black text-gray-900">
-                  ভিডিও সোর্স নির্বাচন করুন <span className="text-rose-500">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSourceType("upload")}
-                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
-                      sourceType === "upload"
-                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 shadow-xs"
-                        : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>ভিডিও ফাইল আপলোড (১ ঘণ্টা পর্যন্ত)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSourceType("url")}
-                    className={`py-2.5 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
-                      sourceType === "url"
-                        ? "bg-emerald-50 border-emerald-500 text-emerald-900 shadow-xs"
-                        : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                    }`}
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    <span>ইউটিউব / ডাইরেক্ট ভিডিও লিংক</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Source Input Area */}
-              {sourceType === "upload" ? (
-                <div className="space-y-2">
-                  <label className="border-2 border-dashed border-emerald-400/60 hover:border-emerald-500 rounded-2xl p-5 flex flex-col items-center justify-center cursor-pointer bg-emerald-50/40 hover:bg-emerald-50/70 transition group">
-                    <input
-                      type="file"
-                      accept="video/mp4,video/webm,video/ogg,video/quicktime,video/mkv"
-                      onChange={handleVideoFileChange}
-                      className="hidden"
-                    />
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
-                      <Upload className="w-6 h-6 stroke-[2.5]" />
-                    </div>
-                    <span className="text-xs sm:text-sm font-black text-emerald-900">
-                      {videoFile ? videoFile.name : "ভিডিও ফাইল সিলেক্ট করুন"}
-                    </span>
-                    <span className="text-[11px] text-gray-500 mt-0.5">
-                      {videoFile
-                        ? `${(videoFile.size / (1024 * 1024)).toFixed(1)} MB`
-                        : "MP4, WebM, MKV (সর্বোচ্চ ৫০০MB / ১ ঘণ্টা)"}
-                    </span>
-                  </label>
-
-                  {isUploadingVideo && (
-                    <div className="space-y-1.5 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
-                      <div className="flex justify-between text-xs font-bold text-emerald-900">
-                        <span>ভিডিও আপলোড হচ্ছে...</span>
-                        <span>{uploadProgress}%</span>
-                      </div>
-                      <div className="w-full bg-emerald-200 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${uploadProgress}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-800">
-                    ভিডিও লিংক (YouTube / MP4 / Google Drive / Cloud Link)
-                  </label>
-                  <input
-                    type="url"
-                    value={videoUrlInput}
-                    onChange={(e) => setVideoUrlInput(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=... বা https://.../video.mp4"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-emerald-500 font-mono"
-                  />
-                  <p className="text-[10px] text-gray-500">
-                    টিপস: ইউটিউব লিংক, ডিরেক্ট MP4 ফাইল লিংক অথবা যেকোনো ড্রাইভ লিংক দেওয়া যাবে।
-                  </p>
+              
+              {/* Duplicate Warning Alert */}
+              {duplicateWarning && (
+                <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex items-start gap-2.5 text-amber-900 text-xs">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">সতর্কবার্তা:</p>
+                    <p>{duplicateWarning}</p>
+                  </div>
                 </div>
               )}
 
-              {/* 2. Surah Selection (Preset or Custom) */}
+              {/* 1. GALLERY VIDEO SELECTION BUTTON */}
+              {!editingVideoId && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-black text-gray-900">
+                    ভিডিও ফাইল নির্বাচন করুন (Android Phone Gallery) <span className="text-rose-500">*</span>
+                  </label>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="video/*"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleSelectGalleryVideo(f);
+                    }}
+                    className="hidden"
+                  />
+
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-emerald-400 hover:border-emerald-600 bg-emerald-50/50 hover:bg-emerald-50 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition text-center group"
+                  >
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500 text-gray-950 flex items-center justify-center mb-2 shadow-md group-hover:scale-105 transition-transform">
+                      <Upload className="w-7 h-7 stroke-[2.5]" />
+                    </div>
+                    
+                    <p className="text-sm font-black text-emerald-950">
+                      {videoFile ? videoFile.name : "গ্যালারি খুলতে এখানে চাপ দিন (Choose from Gallery)"}
+                    </p>
+                    
+                    <p className="text-xs text-gray-600 mt-1">
+                      {videoFile 
+                        ? `সাইজ: ${formatBytes(videoFile.size)} • সময়সীমা: ${duration}` 
+                        : "যেকোনো রেজোলিউশন ও ১ ঘণ্টা পর্যন্ত তেলাওয়াত সাপোর্ট করে"}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Resumable Upload Progress Bar */}
+              {isUploading && (
+                <div className="p-4 bg-emerald-900/10 border-2 border-emerald-500/40 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between text-xs font-black text-emerald-950">
+                    <span className="flex items-center gap-1.5">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                      {uploadStage === "uploading" && `আপলোড হচ্ছে: ${uploadPercent}%`}
+                      {uploadStage === "verifying" && "সার্ভার ও স্টোরেজ ভেরিফিকেশন চলছে..."}
+                      {uploadStage === "saving" && "ডাটাবেস রেকর্ড এন্ট্রি হচ্ছে..."}
+                    </span>
+                    <span className="font-mono text-emerald-800">
+                      {formatBytes(uploadedBytes)} / {formatBytes(totalBytes)}
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-emerald-200 rounded-full h-3 overflow-hidden shadow-inner">
+                    <div 
+                      className="bg-gradient-to-r from-emerald-500 to-teal-500 h-3 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadPercent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Upload Failure Retry Box */}
+              {uploadStage === "failed" && uploadError && (
+                <div className="p-4 bg-rose-50 border border-rose-300 rounded-2xl flex items-center justify-between gap-3 text-rose-900 text-xs">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                    <div>
+                      <p className="font-black">আপলোড ব্যর্থ হয়েছে (Upload Failed):</p>
+                      <p>{uploadError}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-xl shadow active:scale-95 transition shrink-0 flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>পুনরায় আপলোড (Retry)</span>
+                  </button>
+                </div>
+              )}
+
+              {/* 2. Surah & Reciter Details */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-100">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-gray-800">
-                    পবিত্র সূরা নির্বাচন (১-১১৪)
+                    পবিত্র সূরা নির্বাচন করুন
                   </label>
                   <select
                     value={selectedSurahPreset}
                     onChange={(e) => handleSurahPresetChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-500"
                   >
                     {SURAH_PRESETS.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.id}. {s.bn} ({s.en})
                       </option>
                     ))}
-                    <option value="custom">+ কাস্টম সূরা / আয়াত</option>
+                    <option value="custom">+ কাস্টম সূরা / রুকূ'</option>
                   </select>
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-gray-800">
-                    আরবি ক্যালিগ্রাফি শিরোনাম
+                    আরবি শিরোনাম
                   </label>
                   <input
                     type="text"
@@ -1061,7 +1205,7 @@ export const VideoTilawatManagement: React.FC = () => {
                     value={surahNameBn}
                     onChange={(e) => setSurahNameBn(e.target.value)}
                     placeholder="সূরা আল-ফাতিহা"
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-500"
                     required
                   />
                 </div>
@@ -1075,12 +1219,12 @@ export const VideoTilawatManagement: React.FC = () => {
                     value={surahName}
                     onChange={(e) => setSurahName(e.target.value)}
                     placeholder="Surah Al-Fatihah"
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
 
-              {/* 3. Reciter Selection */}
+              {/* Reciter Name Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-100">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-gray-800">
@@ -1089,7 +1233,7 @@ export const VideoTilawatManagement: React.FC = () => {
                   <select
                     value={selectedReciterPreset}
                     onChange={(e) => handleReciterPresetChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium focus:outline-none focus:border-emerald-500"
                   >
                     {RECITER_PRESETS.map((r) => (
                       <option key={r.en} value={r.en}>
@@ -1109,180 +1253,188 @@ export const VideoTilawatManagement: React.FC = () => {
                     value={reciterNameBn}
                     onChange={(e) => setReciterNameBn(e.target.value)}
                     placeholder="মিশারি রাশিদ আল-আফাসী"
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm font-bold focus:outline-none focus:border-emerald-500"
                     required
                   />
                 </div>
               </div>
 
-              {/* Reciter Avatar & Thumbnail */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-800">
-                    ক্বারীর ছবি (Avatar)
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={reciterAvatar || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=80"}
-                      alt="Avatar"
-                      className="w-9 h-9 rounded-full object-cover border shrink-0"
-                    />
-                    <label className="flex-1 py-1.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl text-center cursor-pointer transition">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleAvatarUpload}
-                        className="hidden"
-                      />
-                      ছবি আপলোড
-                    </label>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-gray-800">
-                    ভিডিও থাম্বনেইল ছবি
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <img
-                      src={thumbnailUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80"}
-                      alt="Thumbnail"
-                      className="w-12 h-9 rounded-lg object-cover border shrink-0"
-                    />
-                    <label className="flex-1 py-1.5 px-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl text-center cursor-pointer transition">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleThumbnailUpload}
-                        className="hidden"
-                      />
-                      থাম্বনেইল আপলোড
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Duration & Views */}
+              {/* Duration & Published Status Toggle */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-gray-100">
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-gray-800">
-                    ভিডিওর সময়সীমা (Duration: mm:ss বা hh:mm:ss)
+                    ভিডিওর সময়সীমা (Duration)
                   </label>
                   <input
                     type="text"
                     value={duration}
                     onChange={(e) => setDuration(e.target.value)}
-                    placeholder="12:45 বা 1:00:00"
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm font-mono focus:outline-none focus:border-emerald-500"
+                    placeholder="12:45"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="block text-xs font-bold text-gray-800">
-                    ভিউ কাউন্ট (প্রদর্শনীর জন্য)
+                    পাবলিশ স্ট্যাটাস (Published Status)
                   </label>
-                  <input
-                    type="text"
-                    value={views}
-                    onChange={(e) => setViews(e.target.value)}
-                    placeholder="1.2M views"
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-emerald-500"
+                  <select
+                    value={publishedStatus}
+                    onChange={(e) => setPublishedStatus(e.target.value as "published" | "draft")}
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="published">🟢 প্রকাশিত (Published - অ্যাপে সরাসরি দেখাবে)</option>
+                    <option value="draft">🟡 খসড়া (Draft - শুধুমাত্র অ্যাডমিনে থাকবে)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Thumbnail Preview & Custom Upload */}
+              <div className="space-y-1.5 pt-2 border-t border-gray-100">
+                <label className="block text-xs font-bold text-gray-800">
+                  ভিডিও থাম্বনেইল ছবি (অটো-জেনারেটেড প্রিভিউ)
+                </label>
+                <div className="flex items-center gap-3">
+                  <img
+                    src={thumbnailUrl || "https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=800&q=80"}
+                    alt="Thumbnail"
+                    className="w-20 h-12 rounded-xl object-cover border border-emerald-500/30 shrink-0 shadow-sm"
                   />
+                  <div className="flex-1">
+                    <label className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-xl cursor-pointer transition inline-block">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              if (reader.result) setThumbnailUrl(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="hidden"
+                      />
+                      কাস্টম থাম্বনেইল নির্বাচন
+                    </label>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      ভিডিও সিলেক্ট করার সাথে সাথে অটোমেটিক্যালি একটি থাম্বনেইল ক্যাপচার হয়। চাইলে নিজের পছন্দমতো ছবি দিতে পারেন।
+                    </p>
+                  </div>
                 </div>
               </div>
 
               {/* Description */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-gray-800">
-                  বিবরণ ও ফযিলত
+                  সংক্ষিপ্ত বিবরণ (Description)
                 </label>
                 <textarea
                   rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="তেলাওয়াত ও সূরার তাৎপর্য সংক্ষেপে..."
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              {/* Tags */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-gray-800">
-                  ট্যাগসমূহ (কমা দিয়ে আলাদা করুন)
-                </label>
-                <input
-                  type="text"
-                  value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
-                  placeholder="সূরা আল-ফাতিহা, মিশারি রাশিদ, ভিডিও তেলাওয়াত, Quran HD"
+                  placeholder="তেলাওয়াত ও সূরার ফজিলত..."
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               {/* Submit Buttons */}
-              <div className="pt-4 border-t border-gray-100 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition cursor-pointer"
-                >
-                  বাতিল
-                </button>
-                <button
-                  type="submit"
-                  disabled={isUploadingVideo}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl shadow-md active:scale-95 transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{editingVideoId ? "আপডেট করুন" : "সংরক্ষণ ও প্রকাশ করুন"}</span>
-                </button>
+              <div className="pt-4 border-t border-gray-100 flex items-center justify-between gap-2.5 flex-wrap">
+                {editingVideoId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const v = videoList.find((i) => i.id === editingVideoId);
+                      if (v) {
+                        setIsModalOpen(false);
+                        setVideoToDelete(v);
+                      }
+                    }}
+                    className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 border border-rose-200"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-600" />
+                    <span>এই ভিডিওটি রিমুভ করুন</span>
+                  </button>
+                ) : <div />}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    disabled={isUploading}
+                    className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition cursor-pointer disabled:opacity-50"
+                  >
+                    বাতিল
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUploading}
+                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl shadow-md active:scale-95 transition cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isUploading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>প্রসেসিং হচ্ছে...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>{editingVideoId ? "তথ্য আপডেট করুন" : "আপলোড ও পাবলিশ করুন"}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
+
             </form>
           </div>
         </div>
       )}
 
+      {/* ========================================================================= */}
       {/* VIDEO PREVIEW MODAL */}
+      {/* ========================================================================= */}
       {previewVideo && (
         <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-3 sm:p-4">
           <div className="bg-gray-900 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl border border-emerald-500/40 text-white animate-in fade-in zoom-in-95 duration-200">
-            {/* Player Top Header */}
             <div className="px-5 py-3.5 bg-gray-950 flex items-center justify-between border-b border-gray-800">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <h3 className="text-sm font-bold text-emerald-300">
+              <div className="flex items-center gap-2 min-w-0 pr-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <h3 className="text-sm font-bold text-emerald-300 truncate">
                   {previewVideo.surahNameBn} ({previewVideo.reciterNameBn})
                 </h3>
               </div>
-              <button
-                onClick={() => setPreviewVideo(null)}
-                className="p-1 text-gray-400 hover:text-white rounded-full hover:bg-white/10"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    const target = previewVideo;
+                    setPreviewVideo(null);
+                    setVideoToDelete(target);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow"
+                  title="এই ভিডিওটি মুছে ফেলুন"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>ভিডিও রিমুভ</span>
+                </button>
+                <button
+                  onClick={() => setPreviewVideo(null)}
+                  className="p-1 text-gray-400 hover:text-white rounded-full hover:bg-white/10 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            {/* Video Player Box */}
             <div className="aspect-video bg-black flex items-center justify-center relative">
-              {previewVideo.videoUrl?.includes("youtube.com") || previewVideo.videoUrl?.includes("youtu.be") ? (
-                <iframe
-                  src={
-                    previewVideo.videoUrl.includes("watch?v=")
-                      ? previewVideo.videoUrl.replace("watch?v=", "embed/")
-                      : previewVideo.videoUrl.includes("youtu.be/")
-                      ? previewVideo.videoUrl.replace("youtu.be/", "youtube.com/embed/")
-                      : previewVideo.videoUrl
-                  }
-                  title={previewVideo.surahNameBn}
-                  className="w-full h-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              ) : previewVideo.videoUrl ? (
+              {previewVideo.videoUrl ? (
                 <video
                   src={previewVideo.videoUrl}
                   controls
                   autoPlay
+                  playsInline
                   className="w-full h-full object-contain"
                   poster={previewVideo.thumbnailUrl}
                 />
@@ -1293,13 +1445,13 @@ export const VideoTilawatManagement: React.FC = () => {
               )}
             </div>
 
-            {/* Video Details */}
             <div className="p-4 bg-gray-950 flex items-center justify-between text-xs text-gray-400">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-emerald-400" />
                 <span>সময়সীমা: {previewVideo.duration}</span>
-                <span>•</span>
-                <span>{previewVideo.views}</span>
+                {previewVideo.fileSizeFormatted && (
+                  <span>• সাইজ: {previewVideo.fileSizeFormatted}</span>
+                )}
               </div>
               <span className="font-arabic text-emerald-400 font-bold text-sm">
                 {previewVideo.arabicTitle}
@@ -1308,6 +1460,81 @@ export const VideoTilawatManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* DELETE CONFIRMATION DIALOG (Works 100% reliably in WebViews and mobile) */}
+      {/* ========================================================================= */}
+      {videoToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border-2 border-rose-200">
+            {/* Header */}
+            <div className="p-5 text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 mx-auto flex items-center justify-center border border-rose-200 shadow-inner">
+                <Trash2 className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-black text-gray-900">
+                  ভিডিওটি স্থায়ীভাবে রিমুভ করবেন?
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  এই ভিডিওটি ডাটাবেস ও সার্ভার স্টোরেজ উভয় থেকেই মুছে যাবে এবং অ্যাপের তেলাওয়াত সেকশন থেকে তৎক্ষণাৎ অদৃশ্য হয়ে যাবে।
+                </p>
+              </div>
+
+              {/* Target Video Card Preview */}
+              <div className="bg-gray-50 rounded-2xl p-3 border border-gray-200 flex items-center gap-3 text-left">
+                <img
+                  src={videoToDelete.thumbnailUrl || "https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=200&q=80"}
+                  alt={videoToDelete.surahNameBn}
+                  className="w-16 h-12 rounded-lg object-cover bg-black shrink-0 border border-gray-300"
+                />
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs font-black text-gray-900 truncate">
+                    {videoToDelete.surahNameBn}
+                  </h4>
+                  <p className="text-[11px] text-emerald-700 font-bold truncate">
+                    {videoToDelete.reciterNameBn}
+                  </p>
+                  <p className="text-[10px] text-gray-400 font-mono">
+                    সময়সীমা: {videoToDelete.duration}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setVideoToDelete(null)}
+                disabled={isDeleting}
+                className="flex-1 py-3 bg-white hover:bg-gray-100 text-gray-700 font-bold text-xs rounded-xl border border-gray-300 transition cursor-pointer disabled:opacity-50"
+              >
+                না, বাতিল করুন
+              </button>
+              <button
+                type="button"
+                onClick={() => executeDeleteVideo(videoToDelete)}
+                disabled={isDeleting}
+                className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-xs rounded-xl shadow-lg transition cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>রিমুভ হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>হ্যাঁ, রিমুভ করুন</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import OneSignal from 'react-onesignal';
 import { db } from './firebase';
 import { getApiUrl } from './api';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { uploadImage } from './uploadService';
 
@@ -188,7 +188,7 @@ class NotificationService {
           const res = await Promise.race([
             Notification.requestPermission(),
             new Promise<NotificationPermission>((_, reject) => 
-              setTimeout(() => reject(new Error("Timeout")), 4000)
+              setTimeout(() => reject(new Error("Timeout")), 15000)
             )
           ]);
           if (res === "granted") {
@@ -221,7 +221,7 @@ class NotificationService {
 
       const result = await Promise.race([
         oneSignalPromise(),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 4000))
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 15000))
       ]);
 
       return result;
@@ -392,6 +392,87 @@ class NotificationService {
   }
 
   /**
+   * Send Welcome Notification on New Account Registration
+   * - Triggered ONLY once per new account registration event
+   * - Deduplication via session storage, local storage, and Firestore
+   * - Tapping directly opens the software (url: "/")
+   * - Preserves user's OneSignal subscription and notification permission setup
+   */
+  public async sendRegistrationWelcomeNotification(userId: string) {
+    if (!userId) return;
+
+    const dedupeKey = `welcome_notif_sent_${userId}`;
+    try {
+      if (typeof window !== "undefined") {
+        if (sessionStorage.getItem(dedupeKey) || localStorage.getItem(dedupeKey)) {
+          console.log("[OneSignal] Welcome notification already sent for user session:", userId);
+          return;
+        }
+      }
+    } catch {}
+
+    // Synchronously set deduplication flags to prevent race conditions or duplicate triggers
+    try {
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(dedupeKey, "true");
+        localStorage.setItem(dedupeKey, "true");
+      }
+    } catch {}
+
+    const title = "স্বাগতম Al MAYADIN FASHION-এ 🎉";
+    const message = "আপনার Account সফলভাবে তৈরি হয়েছে। আমাদের সফটওয়্যারের নতুন সুবিধাগুলো দেখতে এখনই প্রবেশ করুন।";
+
+    try {
+      // Check if already sent in Firestore user document
+      try {
+        const uSnap = await getDoc(doc(db, "users", userId));
+        if (uSnap.exists() && uSnap.data()?.welcomeNotificationSent === true) {
+          console.log("[OneSignal] Welcome notification already recorded in Firestore for user:", userId);
+          return;
+        }
+      } catch (checkErr) {
+        // Safe proceed
+      }
+
+      // 1. Associate user identity in OneSignal
+      await this.loginUser(userId);
+
+      // Short delay to ensure external_id alias is synced on OneSignal servers
+      await new Promise(resolve => setTimeout(resolve, 600));
+
+      // 2. Dispatch targeted push notification
+      await this.sendNotification(
+        title,
+        message,
+        [userId],
+        {
+          type: "welcome_registration",
+          userId,
+          click_action: "/",
+          url: "/"
+        }
+      );
+
+      // 3. Trigger immediate local notification if browser permission is already active
+      this.triggerLocalTestNotification(title, message);
+
+      // 4. Mark welcomeNotificationSent in user's Firestore document
+      try {
+        await updateDoc(doc(db, "users", userId), {
+          welcomeNotificationSent: true,
+          welcomeNotifiedAt: Date.now()
+        });
+      } catch (updateErr) {
+        // Safe catch - user document might still be merging
+      }
+
+      console.log("[OneSignal] Welcome registration notification processed successfully for user:", userId);
+    } catch (err) {
+      console.warn("[OneSignal] Welcome registration notification notice:", err);
+    }
+  }
+
+  /**
    * Send Push Notification with Dual-Strategy:
    * 1. Native Direct OneSignal API (Capacitor on Mobile - bypasses private Cloud Run/CORS)
    * 2. Backend Server Proxy (Web browser) with automatic fallback to Direct OneSignal REST API
@@ -475,8 +556,12 @@ class NotificationService {
       large_icon: BRAND_LOGO_URL,
       chrome_web_icon: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=192&q=80",
       chrome_web_badge: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=192&q=80",
-      data: data || {}
+      data: { ...(data || {}), path: data?.url || "/" }
     };
+
+    if (data?.url && (data.url.startsWith("http://") || data.url.startsWith("https://"))) {
+      payload.web_url = data.url;
+    }
 
     if (validImageUrl) {
       payload.big_picture = validImageUrl;

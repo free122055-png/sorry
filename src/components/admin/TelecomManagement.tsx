@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { 
   Wifi, Plus, Trash2, Edit2, X, CheckCircle2, AlertCircle, 
-  Loader2, PhoneCall, Gift, MessageSquare, ShieldCheck, Clock, Tag
+  Loader2, PhoneCall, Gift, MessageSquare, ShieldCheck, Clock, Tag, CreditCard, RotateCcw
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../../lib/firebase";
 import { 
   collection, addDoc, getDocs, deleteDoc, 
-  doc, updateDoc, query, orderBy, onSnapshot 
+  doc, updateDoc, query, orderBy, onSnapshot, setDoc 
 } from "firebase/firestore";
-import { TelecomOffer, TelecomCategory, OperatorType, TelecomOrder } from "../../types/telecom";
+import { TelecomOffer, TelecomCategory, OperatorType, TelecomOrder, TelecomPaymentMethod } from "../../types/telecom";
 import { CustomDropdown } from "../CustomDropdown";
 
 const renderOperatorBadge = (operator: string) => {
@@ -56,13 +56,23 @@ const PREPAID_POSTPAID_OPTIONS = [
   { id: 'both', nameBn: 'সকল সিম (উভয়)' }
 ];
 
+const DEFAULT_OPERATOR_LOGOS: Record<string, string> = {
+  'Grameenphone': 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80',
+  'Robi': 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80',
+  'Banglalink': 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80',
+  'Teletalk': 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80',
+  'Airtel': 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=100&q=80'
+};
+
 export const TelecomManagement: React.FC = () => {
   const [offers, setOffers] = useState<TelecomOffer[]>([]);
   const [orders, setOrders] = useState<TelecomOrder[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<TelecomPaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<'offers' | 'orders'>('offers');
+  const [activeSubTab, setActiveSubTab] = useState<'offers' | 'orders' | 'methods'>('offers');
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingMethod, setEditingMethod] = useState<TelecomPaymentMethod | null>(null);
   const [toast, setToast] = useState<{ text: string; isError?: boolean } | null>(null);
 
   // Form states
@@ -108,11 +118,36 @@ export const TelecomManagement: React.FC = () => {
       console.warn("Telecom orders fetch notice:", error);
     });
 
+    // Fetch Payment Methods
+    const qMethods = collection(db, "telecom_payment_methods");
+    const unsubMethods = onSnapshot(qMethods, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as TelecomPaymentMethod[];
+      setPaymentMethods(data);
+    }, (error) => {
+      console.warn("Telecom payment methods fetch notice:", error);
+    });
+
     return () => {
       unsubOffers();
       unsubOrders();
+      unsubMethods();
     };
   }, []);
+
+  const handleSavePaymentMethod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMethod) return;
+    try {
+      await setDoc(doc(db, "telecom_payment_methods", editingMethod.id), editingMethod);
+      showToast(`${editingMethod.methodName} পেমেন্ট তথ্য সফলভাবে আপডেট হয়েছে!`);
+      setEditingMethod(null);
+    } catch (err) {
+      showToast("পেমেন্ট তথ্য আপডেট করতে সমস্যা হয়েছে", true);
+    }
+  };
 
   const showToast = (text: string, isError = false) => {
     setToast({ text, isError });
@@ -227,7 +262,7 @@ export const TelecomManagement: React.FC = () => {
           <p className="text-sm text-gray-500 font-medium mt-1">অ্যাডমিন প্যানেল থেকে টেলিকম অফার ও কাস্টমার অর্ডার ম্যানেজ করুন</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setActiveSubTab('offers')}
             className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all ${
@@ -243,6 +278,14 @@ export const TelecomManagement: React.FC = () => {
             }`}
           >
             কাস্টমার অর্ডার ({orders.length})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('methods')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all ${
+              activeSubTab === 'methods' ? 'bg-[#002A1A] text-white shadow-md' : 'bg-white text-gray-700 border border-gray-200'
+            }`}
+          >
+            পেমেন্ট মেথড ({paymentMethods.length})
           </button>
           {activeSubTab === 'offers' && !isAdding && (
             <button
@@ -556,6 +599,126 @@ export const TelecomManagement: React.FC = () => {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* PAYMENT METHODS MANAGEMENT TAB */}
+      {activeSubTab === 'methods' && (
+        <div className="space-y-4">
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-xs font-semibold text-emerald-900 flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-emerald-700 shrink-0" />
+            <span>এখানে বিকাশ, নগদ এবং রকেট অ্যাকাউন্ট নম্বর ও নির্দেশিকা আপডেট করতে পারবেন। অ্যাপে গ্রাহকরা এই নম্বরগুলোতেই পেমেন্ট করবে।</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {paymentMethods.map((m) => (
+              <div key={m.id} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-base font-black text-gray-900 flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full bg-[#002A1A]" />
+                      {m.methodName}
+                    </span>
+                    <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                      m.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {m.isActive ? 'সক্রিয়' : 'নিষ্ক্রিয়'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-gray-500 font-bold block">অ্যাকাউন্ট নম্বর:</span>
+                      <span className="font-black text-gray-900 font-mono text-sm">{m.accountNumber}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-gray-500 font-bold block">নির্দেশিকা:</span>
+                      <p className="text-gray-600 leading-relaxed font-medium">{m.instruction}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-100 mt-4 flex items-center justify-end">
+                  <button
+                    onClick={() => setEditingMethod({ ...m })}
+                    className="px-4 py-2 bg-[#002A1A] hover:bg-[#003824] text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>এডিট করুন</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Payment Method Modal */}
+      {editingMethod && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-black text-gray-900">{editingMethod.methodName} পেমেন্ট তথ্য পরিবর্তন</h3>
+              <button onClick={() => setEditingMethod(null)} className="p-1 text-gray-500 hover:text-gray-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePaymentMethod} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-gray-800 block mb-1">অ্যাকাউন্ট নম্বর ও টাইপ *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingMethod.accountNumber}
+                  onChange={(e) => setEditingMethod({ ...editingMethod, accountNumber: e.target.value })}
+                  placeholder="যেমন: 01712345678 (Personal / Send Money)"
+                  className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-800 block mb-1">নির্দেশিকা *</label>
+                <textarea
+                  rows={3}
+                  required
+                  value={editingMethod.instruction}
+                  onChange={(e) => setEditingMethod({ ...editingMethod, instruction: e.target.value })}
+                  placeholder="কাস্টমার কিভাবে টাকা পাঠাবে..."
+                  className="w-full bg-gray-50 border rounded-xl p-2.5 font-medium text-gray-900"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-xs font-bold text-gray-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editingMethod.isActive}
+                    onChange={(e) => setEditingMethod({ ...editingMethod, isActive: e.target.checked })}
+                    className="rounded text-[#002A1A]"
+                  />
+                  <span>সক্রিয় রাখুন (Active)</span>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setEditingMethod(null)}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-200"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#002A1A] hover:bg-[#003824] text-white font-black rounded-xl text-xs shadow-md active:scale-95"
+                >
+                  সংরক্ষণ করুন
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

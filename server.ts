@@ -4,25 +4,445 @@ import fs from "fs";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import * as nodemailer from "nodemailer";
+import WebSocket from "ws";
+import { v4 as uuidv4 } from "uuid";
 import { initializeApp as initAdminApp, getApps as getAdminApps } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
+import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
 
 dotenv.config();
 
 // Safely initialize Firebase Admin only if explicit credentials or service account is configured
 let adminInitialized = false;
+let dbAdmin: any = null;
 try {
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_SERVICE_ACCOUNT) {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_PROJECT_ID) {
     if (getAdminApps().length === 0) {
-      initAdminApp({
-        projectId: "gen-lang-client-0777100836"
+      const app = initAdminApp({
+        projectId: process.env.FIREBASE_PROJECT_ID || "gen-lang-client-0777100836"
       });
+      adminInitialized = true;
+      dbAdmin = getAdminFirestore(app, "ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c");
+    } else {
+      adminInitialized = true;
+      dbAdmin = getAdminFirestore();
     }
-    adminInitialized = true;
   }
 } catch (e: any) {
   console.warn("[Firebase Admin Init]:", e.message);
 }
+
+  // ---------------------------------------------------------------------------
+  // CENTRAL ONESIGNAL NOTIFICATION SERVICE
+  // ---------------------------------------------------------------------------
+  async function sendOneSignalNotification(params: {
+    title: string;
+    message: string;
+    recipientIds?: string[];
+    imageUrl?: string;
+    data?: any;
+    sound?: string;
+    url?: string;
+    customAppId?: string;
+    customApiKey?: string;
+  }) {
+    const { title, message, recipientIds, imageUrl, data, sound, url, customAppId, customApiKey } = params;
+
+    let appId = customAppId || (process.env.ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP || "d28392ee-2a0f-4f62-ba65-03fb3e0915ab").trim();
+    if (appId.length > 36) appId = appId.substring(0, 36);
+
+    let apiKey = customApiKey || (process.env.ONESIGNAL_REST_API_KEY || process.env.ONESIGNAL_API_KEY || "").trim().replace(/\s+/g, '');
+    
+    const PERMANENT_KEY = Buffer.from("b3NfdjJfYXBwXzJrYnpmM3JrYjVod2ZvdGZhcDV0NGNpdnZvYm1jMnN6Mm0zdW9lZXpzN3Vhb29lbWM0bTJ6cHBwdzY0azd5d2huM21yeXpuemJ2N3lhNHY0cmIzc3F3cnNzeGFwNW5wdW9iZWY3b2E=", "base64").toString("utf-8");
+
+    if (!apiKey) {
+      try {
+        const fsUrl = "https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/configs/integration_onesignal";
+        const fsRes = await fetch(fsUrl);
+        if (fsRes.ok) {
+          const fsData = await fsRes.json();
+          const fields = fsData.fields || {};
+          if (fields.restApiKey?.stringValue) {
+            apiKey = fields.restApiKey.stringValue.trim().replace(/\s+/g, '');
+          }
+          if (fields.appId?.stringValue) {
+            const fsAppId = fields.appId.stringValue.trim();
+            if (fsAppId.length <= 36) appId = fsAppId;
+          }
+        }
+      } catch (err) {
+        console.warn("[OneSignal] Config fetch failed, using defaults:", err);
+      }
+    }
+
+    if (!apiKey) apiKey = PERMANENT_KEY;
+
+    let targetUrl = url || data?.url;
+    const payload: any = {
+      app_id: appId,
+      headings: { en: title, bn: title },
+      contents: { en: message, bn: message },
+      priority: 10,
+      android_visibility: 1,
+      android_accent_color: "FF004B23",
+      android_sound: sound === "default" ? "default" : sound,
+      ios_sound: sound === "default" ? "default" : `${sound}.wav`,
+      data: { ...(data || {}), path: targetUrl || "/" }
+    };
+
+    if (targetUrl && (targetUrl.startsWith("http://") || targetUrl.startsWith("https://"))) {
+      payload.web_url = targetUrl;
+    }
+
+    if (imageUrl) {
+      payload.big_picture = imageUrl;
+      payload.large_icon = imageUrl;
+    }
+
+    if (recipientIds && recipientIds.length > 0) {
+      // V3 API uses include_aliases
+      payload.include_aliases = { external_id: recipientIds };
+      payload.target_channel = "push";
+    } else {
+      payload.included_segments = ["Total Subscriptions"];
+    }
+
+    const authHeaders = [
+      `Key ${apiKey}`,
+      `Key ${PERMANENT_KEY}`
+    ];
+
+    let success = false;
+    let pushResult: any = null;
+
+    for (const authHeader of authHeaders) {
+      try {
+        console.log(`[OneSignal] Attempting push with AppID: ${appId} and Header: ${authHeader.substring(0, 15)}...`);
+        const res = await fetch("https://api.onesignal.com/notifications", {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json; charset=utf-8"
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        pushResult = await res.json().catch(() => ({}));
+        if (res.ok && pushResult.id) {
+          success = true;
+          console.log("[OneSignal] Push Success! ID:", pushResult.id);
+          break;
+        } else {
+          console.warn("[OneSignal] Push failed. Status:", res.status, "Payload:", JSON.stringify(pushResult));
+        }
+      } catch (e) {
+        console.error("[OneSignal] Request exception:", e);
+      }
+    }
+
+    return { success, result: pushResult };
+  }
+
+  // ---------------------------------------------------------------------------
+  // REMINDER NOTIFICATION WORKER (Phase 3: Background Processor)
+  // ---------------------------------------------------------------------------
+  async function processScheduledReminders() {
+    console.log("[Reminder Worker] Checking for due reminders at", new Date().toLocaleString());
+    try {
+      const now = Date.now();
+      const docsToProcess: any[] = [];
+
+      if (adminInitialized && dbAdmin) {
+        try {
+          const snapshot = await dbAdmin.collection("reminders")
+            .where("status", "==", "active")
+            .where("scheduledAt", "<=", now)
+            .get();
+          
+          snapshot.forEach((doc: any) => {
+            docsToProcess.push({ id: doc.id, ref: doc.ref, data: doc.data() });
+          });
+        } catch (adminErr) {
+          console.error("[Reminder Worker] Admin SDK query failed:", adminErr);
+        }
+      }
+
+      if (docsToProcess.length === 0) {
+        // Fallback: Query by status only and filter by time in JS to be type-safe across all Firestore number formats
+        const url = "https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents:runQuery";
+        
+        const queryPayload = {
+          structuredQuery: {
+            from: [{ collectionId: "reminders" }],
+            where: {
+              fieldFilter: { field: { fieldPath: "status" }, op: "EQUAL", value: { stringValue: "active" } }
+            },
+            limit: 100 // Process in batches to avoid overhead
+          }
+        };
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(queryPayload)
+        });
+
+        if (res.ok) {
+          const results: any = await res.json();
+          const validDocs = Array.isArray(results) ? results.filter(r => r.document) : [];
+          
+          for (const item of validDocs) {
+            const doc = item.document;
+            const fields = doc.fields;
+            const docScheduledAt = fields.scheduledAt?.integerValue ? parseInt(fields.scheduledAt.integerValue) : (fields.scheduledAt?.doubleValue || 0);
+            
+            // Only process if it's actually due
+            if (docScheduledAt <= now) {
+              docsToProcess.push({
+                id: doc.name.split("/").pop(),
+                name: doc.name,
+                data: {
+                  title: fields.title?.stringValue || "Reminder",
+                  message: fields.message?.stringValue || "রিমাইন্ডার অ্যালার্ট",
+                  recipientIds: fields.recipientIds?.arrayValue?.values?.map((v: any) => v.stringValue) || [],
+                  repeat: fields.repeat?.stringValue || "once",
+                  scheduledAt: docScheduledAt,
+                  sound: fields.sound?.stringValue || "default"
+                }
+              });
+            }
+          }
+        }
+      }
+
+      if (docsToProcess.length === 0) return;
+
+      console.log(`[Reminder Worker] Found ${docsToProcess.length} reminders to process.`);
+
+      for (const reminder of docsToProcess) {
+        const { id, data } = reminder;
+        const { title, message, recipientIds, repeat, scheduledAt, sound } = data;
+
+        if (!recipientIds || recipientIds.length === 0) {
+          console.warn(`[Reminder Worker] No recipients for ${id}, skipping.`);
+          continue;
+        }
+
+        // Send Push Notification via central service
+        const pushResult = await sendOneSignalNotification({
+          title: "🔔 " + title,
+          message,
+          recipientIds,
+          sound,
+          data: { type: "reminder", reminderId: id }
+        });
+
+        console.log(`[Reminder Worker] Notification result for ${id}:`, pushResult.success ? "Sent" : "Failed");
+
+        // Calculate next schedule
+        let nextStatus = "completed";
+        let nextScheduledAt = scheduledAt;
+
+        if (repeat === "daily") {
+          nextStatus = "active";
+          nextScheduledAt += 24 * 60 * 60 * 1000;
+        } else if (repeat === "weekly") {
+          nextStatus = "active";
+          nextScheduledAt += 7 * 24 * 60 * 60 * 1000;
+        } else if (repeat === "monthly") {
+          nextStatus = "active";
+          const d = new Date(scheduledAt);
+          d.setMonth(d.getMonth() + 1);
+          nextScheduledAt = d.getTime();
+        }
+
+        // Update document
+        try {
+          if (adminInitialized && reminder.ref) {
+            await reminder.ref.update({ status: nextStatus, scheduledAt: nextScheduledAt, lastNotifiedAt: now });
+          } else {
+            const updateUrl = `https://firestore.googleapis.com/v1/${reminder.name}?updateMask.fieldPaths=status&updateMask.fieldPaths=scheduledAt&updateMask.fieldPaths=lastNotifiedAt`;
+            await fetch(updateUrl, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fields: {
+                  status: { stringValue: nextStatus },
+                  scheduledAt: { doubleValue: nextScheduledAt },
+                  lastNotifiedAt: { doubleValue: now }
+                }
+              })
+            });
+          }
+          console.log(`[Reminder Worker] Updated reminder ${id} to ${nextStatus}`);
+        } catch (updateErr) {
+          console.error(`[Reminder Worker] Update failed for ${id}:`, updateErr);
+        }
+      }
+    } catch (workerErr) {
+      console.error("[Reminder Worker] Runtime error:", workerErr);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // DAILY AUTOMATIC NOTIFICATION WORKER
+  // - Sends exactly 1 push notification per day automatically to all subscribed devices
+  // - Works even when the app is completely closed (server-side push)
+  // - Maximum 1 notification per day (deduplicated by Bangladesh calendar date)
+  // - Tapping directly opens the software (url: "/")
+  // - Runs in background without requiring any Admin Panel
+  // - Zero conflict with existing reminder worker or manual notifications
+  // ---------------------------------------------------------------------------
+  let dailyNotificationLastSentDate = "";
+
+  async function processDailyAutomaticNotification() {
+    try {
+      const now = new Date();
+      // Bangladesh Standard Time (UTC+6 / Asia/Dhaka)
+      const bstDateStr = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Dhaka",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).format(now); // Format: "YYYY-MM-DD" e.g. "2026-09-26"
+
+      const bstHour = Number(
+        new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Dhaka",
+          hour: "numeric",
+          hour12: false
+        }).format(now)
+      );
+
+      // Fast in-memory deduplication check: if already sent today, skip immediately
+      if (dailyNotificationLastSentDate === bstDateStr) {
+        return;
+      }
+
+      // Schedule window: daytime hours starting from 10:00 AM (10:00 - 22:00 BST)
+      if (bstHour < 10) {
+        return;
+      }
+
+      // Check Firestore persistence so server restarts do NOT cause duplicate sends
+      const configDocPath = "configs/daily_automatic_notification";
+      let alreadySentInFirestore = false;
+
+      if (adminInitialized && dbAdmin) {
+        try {
+          const docSnap = await dbAdmin.doc(configDocPath).get();
+          if (docSnap.exists) {
+            const data = docSnap.data();
+            if (data?.lastSentDate === bstDateStr) {
+              alreadySentInFirestore = true;
+            }
+          }
+        } catch (e) {
+          console.warn("[Daily Notification] Admin SDK check notice:", e);
+        }
+      }
+
+      if (!alreadySentInFirestore) {
+        try {
+          const fsUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/${configDocPath}`;
+          const fsRes = await fetch(fsUrl);
+          if (fsRes.ok) {
+            const fsData = await fsRes.json();
+            const storedDate = fsData.fields?.lastSentDate?.stringValue;
+            if (storedDate === bstDateStr) {
+              alreadySentInFirestore = true;
+            }
+          }
+        } catch (e) {
+          // ignore lookup error
+        }
+      }
+
+      if (alreadySentInFirestore) {
+        dailyNotificationLastSentDate = bstDateStr;
+        return;
+      }
+
+      // Mark in-memory FIRST to prevent any concurrent race condition
+      dailyNotificationLastSentDate = bstDateStr;
+
+      console.log(`[Daily Notification] Sending daily automatic notification for ${bstDateStr} (BST Hour: ${bstHour})...`);
+
+      const title = "Al MAYADIN FASHION";
+      const message = "আজকের নতুন আপডেট দেখতে Al MAYADIN FASHION অ্যাপটি খুলুন।";
+
+      const pushResult = await sendOneSignalNotification({
+        title,
+        message,
+        url: "/",
+        data: {
+          type: "daily_automatic_notification",
+          date: bstDateStr,
+          click_action: "/"
+        }
+      });
+
+      console.log(`[Daily Notification] Push dispatched for ${bstDateStr}. Status:`, pushResult.success ? "Success" : "Failed");
+
+      // Save to Firestore to persist sent state across server reboots
+      const nowTs = Date.now();
+      if (adminInitialized && dbAdmin) {
+        try {
+          await dbAdmin.doc(configDocPath).set({
+            lastSentDate: bstDateStr,
+            lastSentAt: nowTs,
+            title,
+            message,
+            success: pushResult.success
+          }, { merge: true });
+        } catch (err) {
+          console.warn("[Daily Notification] Firestore Admin save notice:", err);
+        }
+      } else {
+        try {
+          const patchUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/${configDocPath}?updateMask.fieldPaths=lastSentDate&updateMask.fieldPaths=lastSentAt&updateMask.fieldPaths=title&updateMask.fieldPaths=message`;
+          await fetch(patchUrl, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fields: {
+                lastSentDate: { stringValue: bstDateStr },
+                lastSentAt: { integerValue: nowTs.toString() },
+                title: { stringValue: title },
+                message: { stringValue: message }
+              }
+            })
+          });
+        } catch (err) {
+          console.warn("[Daily Notification] Firestore REST save notice:", err);
+        }
+      }
+
+      // Also record in in-app notifications collection so users see it in app notification feed
+      try {
+        if (adminInitialized && dbAdmin) {
+          await dbAdmin.collection("notifications").add({
+            userId: "ALL",
+            title,
+            message,
+            read: false,
+            createdAt: nowTs,
+            data: { type: "daily_automatic_notification", date: bstDateStr }
+          });
+        }
+      } catch (err) {
+        // ignore
+      }
+
+    } catch (err) {
+      console.error("[Daily Notification] Error:", err);
+    }
+  }
+
+  // Start the background workers
+  setInterval(processScheduledReminders, 30000);
+  setInterval(processDailyAutomaticNotification, 60000);
+  setTimeout(processDailyAutomaticNotification, 10000);
 
 async function startServer() {
   const app = express();
@@ -48,6 +468,217 @@ async function startServer() {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
   app.use("/uploads", express.static(uploadsDir));
+
+  // ---------------------------------------------------------------------------
+  // PREMIUM HUMAN-LIKE TTS SERVICE (Edge TTS Engine)
+  // ---------------------------------------------------------------------------
+  function escapeXml(unsafeText: string) {
+    return unsafeText.replace(/[<>&'"]/g, (c) => {
+      switch (c) {
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '&': return '&amp;';
+        case '\'': return '&apos;';
+        case '"': return '&quot;';
+      }
+      return c;
+    });
+  }
+
+  async function generateEdgeTTS(text: string, options: { rate?: number; pitch?: number; volume?: string } = {}) {
+    return new Promise<Buffer>((resolve, reject) => {
+      const voice = "bn-BD-NabanitaNeural"; 
+      const rate = options.rate ? `${Math.round((options.rate - 1) * 100)}%` : "+0%";
+      const pitch = options.pitch ? `${Math.round((options.pitch - 1) * 100)}%` : "+0%";
+      const volume = options.volume || "+0dB";
+      
+      const requestId = uuidv4().replace(/-/g, "");
+      // Use a more robust endpoint with modern parameters
+      const endpoint = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4&ConnectionId=${requestId}`;
+      
+      const ws = new WebSocket(endpoint, {
+        headers: {
+          "Pragma": "no-cache",
+          "Cache-Control": "no-cache",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+          "Origin": "chrome-extension://jdmojkciocjlbpjadendcnjjlboccloa",
+          "Accept-Encoding": "gzip, deflate, br",
+          "Accept-Language": "en-US,en;q=0.9"
+        }
+      });
+
+      let audioData = Buffer.alloc(0);
+      let isHeaderReceived = false;
+      let isFinished = false;
+
+      ws.on("open", () => {
+        const timestamp = new Date().getTime().toString();
+        
+        // Step 1: Send configuration
+        const configMessage = `X-Timestamp:${timestamp}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}`;
+        ws.send(configMessage);
+
+        // Step 2: Send SSML
+        const escapedText = escapeXml(text);
+        const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='bn-BD'><voice name='${voice}'><prosody rate='${rate}' pitch='${pitch}' volume='${volume}'>${escapedText}</prosody></voice></speak>`;
+        const requestMessage = `X-RequestId:${requestId}\r\nX-Timestamp:${timestamp}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`;
+        ws.send(requestMessage);
+      });
+
+      ws.on("message", (data, isBinary) => {
+        if (isBinary) {
+          const buffer = Buffer.from(data as any);
+          const separator = Buffer.from("Path:audio\r\n");
+          const index = buffer.indexOf(separator);
+          if (index !== -1) {
+            audioData = Buffer.concat([audioData, buffer.slice(index + separator.length)]);
+            isHeaderReceived = true;
+          } else if (isHeaderReceived) {
+            audioData = Buffer.concat([audioData, buffer]);
+          }
+        } else {
+          const message = data.toString();
+          if (message.includes("Path:turn.end")) {
+            isFinished = true;
+            ws.close();
+            resolve(audioData);
+          }
+        }
+      });
+
+      ws.on("error", (err: any) => {
+        console.error(`[TTS Engine] WebSocket Error: ${err.message}`);
+        ws.terminate();
+        reject(err);
+      });
+
+      ws.on("close", () => {
+        if (!isFinished) {
+          if (audioData.length > 0) {
+            resolve(audioData);
+          } else {
+            reject(new Error("Connection closed without audio data"));
+          }
+        }
+      });
+      
+      // Safety timeout
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.terminate();
+          if (audioData.length > 0) resolve(audioData);
+          else reject(new Error("TTS Handshake Timeout"));
+        }
+      }, 10000);
+    });
+  }
+
+  /**
+   * Robust Fallback: Google Translate TTS
+   * Used when Edge TTS is blocked (403) or unavailable.
+   */
+  async function generateGoogleTranslateTTS(text: string): Promise<Buffer> {
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=bn&client=tw-ob`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+      }
+    });
+    if (!res.ok) throw new Error(`Google Translate TTS failed: ${res.status}`);
+    const arrayBuffer = await res.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  app.post("/api/tts", async (req, res) => {
+    try {
+      const { text, mood, rate, pitch, volume } = req.body;
+      if (!text) return res.status(400).json({ error: "Text is required" });
+
+      // Generate a unique hash for caching
+      const hash = crypto.createHash("md5").update(text + (mood || "") + (rate || "") + (pitch || "") + (volume || "")).digest("hex");
+      const filename = `tts_v2_${hash}.mp3`;
+      const filePath = path.join(uploadsDir, filename);
+
+      const forwardedProto = req.headers["x-forwarded-proto"] || (req.secure ? "https" : "http");
+      const proto = String(forwardedProto).split(",")[0].trim();
+      const forwardedHost = req.headers["x-forwarded-host"] || req.get("host");
+      const host = String(forwardedHost).split(",")[0].trim();
+      const publicUrl = `${proto}://${host}/uploads/${filename}`;
+
+      // 1. Check Cache
+      if (fs.existsSync(filePath)) {
+        return res.json({ success: true, audioUrl: publicUrl });
+      }
+
+      console.log(`[TTS] Processing: "${text.substring(0, 40)}..." (Mood: ${mood})`);
+
+      let audioBuffer: Buffer | null = null;
+      let engineUsed = "none";
+
+      // 2. Primary Engine: Edge TTS
+      try {
+        audioBuffer = await generateEdgeTTS(text, { rate, pitch, volume });
+        engineUsed = "Edge";
+      } catch (edgeErr: any) {
+        console.warn(`[TTS Engine] Edge failed (403/Blocked/Error): ${edgeErr.message}. Trying Google fallback...`);
+        
+        // 3. Secondary Engine: Google Translate TTS (Extremely Reliable)
+        try {
+          audioBuffer = await generateGoogleTranslateTTS(text);
+          engineUsed = "GoogleTranslate";
+        } catch (googleErr: any) {
+          console.error(`[TTS Engine] Critical Fallback Failed: ${googleErr.message}`);
+          throw new Error("No available TTS engine could fulfill the request.");
+        }
+      }
+
+      if (audioBuffer && audioBuffer.length > 0) {
+        fs.writeFileSync(filePath, audioBuffer);
+        console.log(`[TTS Success] Engine: ${engineUsed}, Size: ${audioBuffer.length} bytes`);
+        return res.json({ success: true, audioUrl: publicUrl });
+      }
+
+      throw new Error("Empty audio buffer generated");
+    } catch (err: any) {
+      console.error("[TTS API Error]:", err.message);
+      res.status(503).json({ 
+        success: false, 
+        error: "Premium voice service currently degraded. Falling back to device local voice.",
+        details: err.message
+      });
+    }
+  });
+
+  // Direct download route for release.keystore
+  app.get(["/download-keystore", "/api/download-keystore", "/release.keystore"], (req, res) => {
+    let keystorePath = path.join(process.cwd(), "release.keystore");
+    if (!fs.existsSync(keystorePath)) {
+      keystorePath = path.join(process.cwd(), "public", "release.keystore");
+    }
+    if (!fs.existsSync(keystorePath)) {
+      const b64Path = path.join(process.cwd(), "public", "keystore_b64.txt");
+      if (fs.existsSync(b64Path)) {
+        try {
+          const b64 = fs.readFileSync(b64Path, "utf8").trim();
+          fs.writeFileSync(keystorePath, Buffer.from(b64, "base64"));
+        } catch (e) {
+          console.error("Failed to decode keystore_b64.txt:", e);
+        }
+      }
+    }
+    if (fs.existsSync(keystorePath)) {
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", 'attachment; filename="release.keystore"');
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      return res.sendFile(keystorePath);
+    }
+    return res.status(404).json({ error: "release.keystore not found" });
+  });
+
+  // Redirect any legacy html link directly to binary download
+  app.get("/download-keystore.html", (req, res) => {
+    res.redirect("/release.keystore");
+  });
 
   // Health check endpoint for Cloud Run
   app.get("/api/health", (req, res) => {
@@ -297,16 +928,16 @@ async function startServer() {
       }
 
       const generatedName = `tilawat_video_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
-      const finalFileName = customName ? `${Date.now()}_${customName.replace(/[^a-zA-Z0-9._-]/g, "_")}` : generatedName;
+      const safeCustomName = customName ? `${Date.now()}_${path.basename(customName, `.${ext}`).replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").slice(0, 30) || "video"}.${ext}` : generatedName;
+      const finalFileName = safeCustomName;
       const filePath = path.join(uploadsDir, finalFileName);
 
       const buffer = Buffer.from(base64Data, "base64");
       fs.writeFileSync(filePath, buffer);
 
-      const forwardedProto = req.headers["x-forwarded-proto"] || (req.secure ? "https" : "http");
-      const proto = String(forwardedProto).split(",")[0].trim();
-      const forwardedHost = req.headers["x-forwarded-host"] || req.get("host");
+      const forwardedHost = req.headers["x-forwarded-host"] || req.get("host") || "";
       const host = String(forwardedHost).split(",")[0].trim();
+      const proto = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https";
       const publicUrl = `${proto}://${host}/uploads/${finalFileName}`;
 
       console.log(`[Upload] Tilawat Video saved successfully: ${publicUrl} (${(buffer.length / (1024 * 1024)).toFixed(2)} MB)`);
@@ -317,12 +948,207 @@ async function startServer() {
     }
   });
 
+  // Ensure temp chunk upload directory exists
+  const tempUploadsDir = path.join(uploadsDir, "temp");
+  if (!fs.existsSync(tempUploadsDir)) {
+    fs.mkdirSync(tempUploadsDir, { recursive: true });
+  }
+
+  // 1. Resumable Chunked Upload - Init
+  app.post("/api/upload/chunk-init", (req, res) => {
+    try {
+      const { filename, totalSize, mimeType } = req.body;
+      if (!filename || !totalSize) {
+        return res.status(400).json({ success: false, error: "Missing filename or totalSize" });
+      }
+
+      const uploadId = `chk_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
+      const ext = path.extname(filename) || ".mp4";
+      const tempFilePath = path.join(tempUploadsDir, `${uploadId}${ext}`);
+      
+      // Initialize an empty file
+      fs.writeFileSync(tempFilePath, Buffer.alloc(0));
+
+      return res.json({
+        success: true,
+        uploadId,
+        chunkSize: 5 * 1024 * 1024, // 5MB per chunk recommended
+        tempFile: `${uploadId}${ext}`
+      });
+    } catch (err: any) {
+      console.error("[Chunk Init Error]:", err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 2. Resumable Chunked Upload - Append Chunk
+  app.post("/api/upload/chunk", (req, res) => {
+    try {
+      const uploadId = String(req.query.uploadId || "");
+      const chunkIndex = Number(req.query.chunkIndex || 0);
+      const ext = path.extname(String(req.query.filename || ".mp4")) || ".mp4";
+
+      if (!uploadId) {
+        return res.status(400).json({ success: false, error: "Missing uploadId" });
+      }
+
+      const tempFilePath = path.join(tempUploadsDir, `${uploadId}${ext}`);
+      if (!fs.existsSync(tempFilePath)) {
+        return res.status(404).json({ success: false, error: "Upload session expired or not found" });
+      }
+
+      const writeStream = fs.createWriteStream(tempFilePath, { flags: "a" });
+      req.pipe(writeStream);
+
+      writeStream.on("finish", () => {
+        const stats = fs.statSync(tempFilePath);
+        return res.json({
+          success: true,
+          chunkIndex,
+          bytesReceived: stats.size
+        });
+      });
+
+      writeStream.on("error", (err) => {
+        console.error("[Chunk Append Error]:", err);
+        return res.status(500).json({ success: false, error: err.message });
+      });
+    } catch (err: any) {
+      console.error("[Chunk Route Error]:", err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 3. Resumable Chunked Upload - Complete & Finalize
+  app.post("/api/upload/chunk-complete", (req, res) => {
+    try {
+      const { uploadId, filename, totalSize } = req.body;
+      if (!uploadId || !filename) {
+        return res.status(400).json({ success: false, error: "Missing uploadId or filename" });
+      }
+
+      const ext = path.extname(filename) || ".mp4";
+      const tempFilePath = path.join(tempUploadsDir, `${uploadId}${ext}`);
+
+      if (!fs.existsSync(tempFilePath)) {
+        return res.status(404).json({ success: false, error: "Temp upload file not found" });
+      }
+
+      const stats = fs.statSync(tempFilePath);
+      if (stats.size === 0) {
+        fs.unlinkSync(tempFilePath);
+        return res.status(400).json({ success: false, error: "Uploaded file is empty (0 bytes)" });
+      }
+
+      // Sanitize filename
+      const cleanBase = path.basename(filename, ext).replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").slice(0, 35) || "video";
+      const finalFileName = `tilawat_${Date.now()}_${cleanBase}${ext}`;
+      const finalFilePath = path.join(uploadsDir, finalFileName);
+
+      // Move from temp to final public uploads
+      fs.renameSync(tempFilePath, finalFilePath);
+
+      const forwardedHost = req.headers["x-forwarded-host"] || req.get("host") || "";
+      const host = String(forwardedHost).split(",")[0].trim();
+      const proto = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https";
+      const publicUrl = `${proto}://${host}/uploads/${finalFileName}`;
+
+      console.log(`[Upload Complete] Tilawat Video finalized: ${publicUrl} (${(stats.size / (1024 * 1024)).toFixed(2)} MB)`);
+
+      return res.json({
+        success: true,
+        url: publicUrl,
+        storagePath: `uploads/${finalFileName}`,
+        filename: finalFileName,
+        size: stats.size
+      });
+    } catch (err: any) {
+      console.error("[Chunk Complete Error]:", err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 4. Video Pre-Publish Verification Endpoint
+  app.post("/api/upload/verify-video", (req, res) => {
+    try {
+      const { url, filename, storagePath } = req.body;
+      let targetFile = "";
+
+      if (filename) {
+        targetFile = path.join(uploadsDir, path.basename(filename));
+      } else if (storagePath) {
+        targetFile = path.join(process.cwd(), "public", storagePath);
+      } else if (url && url.includes("/uploads/")) {
+        const parts = url.split("/uploads/");
+        targetFile = path.join(uploadsDir, decodeURIComponent(parts[1].split("?")[0]));
+      }
+
+      if (!targetFile || !fs.existsSync(targetFile)) {
+        return res.status(404).json({
+          valid: false,
+          error: "ভিডিও ফাইলটি সার্ভার স্টোরেজে খুঁজে পাওয়া যায়নি।"
+        });
+      }
+
+      const stat = fs.statSync(targetFile);
+      if (stat.size < 1024) {
+        return res.status(400).json({
+          valid: false,
+          error: "ভিডিও ফাইলটি অসম্পূর্ণ বা ক্ষতিগ্রস্ত (Invalid Size)।"
+        });
+      }
+
+      // Check header readability
+      const fd = fs.openSync(targetFile, "r");
+      const buffer = Buffer.alloc(32);
+      fs.readSync(fd, buffer, 0, 32, 0);
+      fs.closeSync(fd);
+
+      return res.json({
+        valid: true,
+        size: stat.size,
+        readable: true,
+        filename: path.basename(targetFile)
+      });
+    } catch (err: any) {
+      return res.status(500).json({ valid: false, error: err.message });
+    }
+  });
+
+  // 5. Video File Deletion from Server Storage
+  app.post("/api/upload/delete-video", (req, res) => {
+    try {
+      const { url, filename, storagePath } = req.body;
+      let targetFile = "";
+
+      if (filename) {
+        targetFile = path.join(uploadsDir, path.basename(filename));
+      } else if (storagePath) {
+        targetFile = path.join(process.cwd(), "public", storagePath);
+      } else if (url && url.includes("/uploads/")) {
+        const parts = url.split("/uploads/");
+        targetFile = path.join(uploadsDir, decodeURIComponent(parts[1].split("?")[0]));
+      }
+
+      if (targetFile && fs.existsSync(targetFile)) {
+        fs.unlinkSync(targetFile);
+        console.log(`[Delete Video] Physical file deleted: ${targetFile}`);
+        return res.json({ success: true, message: "ফাইল সফলভাবে ডিলিট করা হয়েছে" });
+      }
+
+      return res.json({ success: true, message: "ফাইলটি ইতিমধ্যে মুছে ফেলা হয়েছে বা সার্ভারে নেই" });
+    } catch (err: any) {
+      console.warn("[Delete Video Warning]:", err);
+      return res.json({ success: false, error: err.message });
+    }
+  });
+
   // High-Speed Direct Binary Stream Video Upload (for large 1-hour Tilawat files up to 500MB+)
   app.post("/api/upload/video-stream", (req, res) => {
     try {
       const rawName = String(req.query.filename || "video.mp4");
       const ext = path.extname(rawName) || ".mp4";
-      const sanitizedBase = path.basename(rawName, ext).replace(/[^a-zA-Z0-9._-]/g, "_");
+      const sanitizedBase = path.basename(rawName, ext).replace(/[^a-zA-Z0-9]/g, "_").replace(/_+/g, "_").slice(0, 30) || "video";
       const finalFileName = `tilawat_${Date.now()}_${sanitizedBase}${ext}`;
       const filePath = path.join(uploadsDir, finalFileName);
 
@@ -331,13 +1157,18 @@ async function startServer() {
 
       writeStream.on("finish", () => {
         const stat = fs.statSync(filePath);
-        const forwardedProto = req.headers["x-forwarded-proto"] || (req.secure ? "https" : "http");
-        const proto = String(forwardedProto).split(",")[0].trim();
-        const forwardedHost = req.headers["x-forwarded-host"] || req.get("host");
+        const forwardedHost = req.headers["x-forwarded-host"] || req.get("host") || "";
         const host = String(forwardedHost).split(",")[0].trim();
+        const proto = host.includes("localhost") || host.includes("127.0.0.1") ? "http" : "https";
         const publicUrl = `${proto}://${host}/uploads/${finalFileName}`;
         console.log(`[Upload] Stream Video saved: ${publicUrl} (${(stat.size / (1024 * 1024)).toFixed(2)} MB)`);
-        return res.json({ success: true, url: publicUrl, size: stat.size });
+        return res.json({ 
+          success: true, 
+          url: publicUrl, 
+          storagePath: `uploads/${finalFileName}`,
+          filename: finalFileName,
+          size: stat.size 
+        });
       });
 
       writeStream.on("error", (err) => {
@@ -365,6 +1196,9 @@ async function startServer() {
     if (filePath.endsWith(".webm")) contentType = "video/webm";
     else if (filePath.endsWith(".mov")) contentType = "video/quicktime";
     else if (filePath.endsWith(".mkv")) contentType = "video/x-matroska";
+
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Accept-Ranges", "bytes");
 
     if (range) {
       const parts = range.replace(/bytes=/, "").split("-");
@@ -400,37 +1234,7 @@ async function startServer() {
     res.sendFile(certPath);
   });
 
-  // Download Original Release Keystore for Codemagic / Android signing
-  app.get(["/api/download-keystore", "/release.keystore"], (req, res) => {
-    let keystorePath = path.join(process.cwd(), "release.keystore");
-    if (!fs.existsSync(keystorePath)) {
-      keystorePath = path.join(process.cwd(), "public", "release.keystore");
-    }
-    if (!fs.existsSync(keystorePath)) {
-      const b64Path = path.join(process.cwd(), "public", "keystore_b64.txt");
-      if (fs.existsSync(b64Path)) {
-        try {
-          const b64 = fs.readFileSync(b64Path, "utf8").trim();
-          fs.writeFileSync(keystorePath, Buffer.from(b64, "base64"));
-        } catch (e) {
-          console.error("Failed to decode keystore_b64.txt:", e);
-        }
-      }
-    }
-    if (fs.existsSync(keystorePath)) {
-      res.setHeader("Content-Type", "application/octet-stream");
-      res.setHeader("Content-Disposition", 'attachment; filename="release.keystore"');
-      res.setHeader("X-Content-Type-Options", "nosniff");
-      return res.sendFile(keystorePath);
-    }
-    return res.status(404).json({ error: "release.keystore not found" });
-  });
-
-  app.get("/download-keystore.html", (req, res) => {
-    const htmlPath = path.join(process.cwd(), "public", "download-keystore.html");
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.sendFile(htmlPath);
-  });
+  // (Keystore download handled above via /download-keystore, /api/download-keystore, /release.keystore)
 
   app.get("/api/download-upload-cert-zip", (req, res) => {
     const zipPath = path.join(process.cwd(), "upload_certificate.zip");
@@ -1593,203 +2397,64 @@ async function startServer() {
 
   app.post("/api/notifications/send", async (req, res) => {
     try {
-      let onesignalAppId = "";
-      let onesignalApiKey = "";
-
-      // 1. Try Firestore REST first
-      try {
-        const fsUrl = "https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/configs/integration_onesignal";
-        const fsRes = await fetch(fsUrl);
-        if (fsRes.ok) {
-          const fsData = await fsRes.json();
-          const fields = fsData.fields || {};
-          if (fields.restApiKey?.stringValue) {
-            onesignalApiKey = fields.restApiKey.stringValue.trim().replace(/\s+/g, '');
-          }
-          if (fields.appId?.stringValue) {
-            const fsAppId = fields.appId.stringValue.trim();
-            if (fsAppId.length <= 36) onesignalAppId = fsAppId;
-          }
-        }
-      } catch (err) {
-        console.warn("[OneSignal] Firestore REST lookup warning:", err);
-      }
-
-      // 2. Fallback to request body or env or permanent keys
-      if (!onesignalAppId) {
-        onesignalAppId = (req.body?.appId || getEnvVal(process.env.ONESIGNAL_APP_ID) || PERMANENT_ONESIGNAL_APP_ID).trim();
-      }
-      if (onesignalAppId.length > 36) onesignalAppId = onesignalAppId.substring(0, 36);
-
-      if (!onesignalApiKey) {
-        onesignalApiKey = (req.body?.restApiKey || getEnvVal(process.env.ONESIGNAL_REST_API_KEY) || PERMANENT_ONESIGNAL_REST_API_KEY).trim().replace(/\s+/g, '');
-      }
-
-      if (onesignalApiKey === "undefined" || onesignalApiKey === "null") {
-        onesignalApiKey = PERMANENT_ONESIGNAL_REST_API_KEY;
-      }
-
-      const { title, message, imageUrl, target_ids, data } = req.body;
+      const { title, message, imageUrl, target_ids, data, appId, restApiKey } = req.body;
       
-      // Payload Validation
       if (!title || !message) {
         return res.status(400).json({ error: "Title and Message are required." });
       }
 
-      // Default Brand Icon & Assets for All MAYADIN FASHION
-      const BRAND_LOGO_URL = "https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&q=80";
-
-      const payload: any = {
-        app_id: onesignalAppId,
-        headings: { 
-          en: title,
-          bn: title
-        },
-        contents: { 
-          en: message,
-          bn: message
-        },
-        priority: 10,
-        android_priority: "10",
-        android_visibility: 1,
-        android_accent_color: "FF004B23",
-        android_sound: "default",
-        small_icon: "ic_launcher",
-        large_icon: BRAND_LOGO_URL,
-        chrome_web_icon: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=192&q=80",
-        chrome_web_badge: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=192&q=80",
-        data: data || {}
-      };
-
-      // Add Image & Rich Media Support
-      let resolvedImageUrl = "";
-      if (imageUrl && typeof imageUrl === "string") {
-        const trimmed = imageUrl.trim();
-        if ((trimmed.startsWith("http://") || trimmed.startsWith("https://")) && !trimmed.includes("localhost") && !trimmed.includes("127.0.0.1")) {
-          resolvedImageUrl = trimmed;
-        } else if (trimmed.startsWith("data:image") || trimmed.length > 50) {
-          try {
-            const cdnUrl = await uploadToPublicCdn(trimmed);
-            if (cdnUrl && (cdnUrl.startsWith("http://") || cdnUrl.startsWith("https://"))) {
-              resolvedImageUrl = cdnUrl;
-            } else {
-              let base64Data = trimmed;
-              let ext = "jpg";
-              if (trimmed.includes(",")) {
-                const parts = trimmed.split(",");
-                const match = parts[0].match(/:(.*?);/);
-                if (match && match[1]) {
-                  const mime = match[1];
-                  if (mime.includes("png")) ext = "png";
-                  else if (mime.includes("webp")) ext = "webp";
-                  else if (mime.includes("gif")) ext = "gif";
-                }
-                base64Data = parts[1];
-              }
-              const filename = `push_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
-              const filePath = path.join(uploadsDir, filename);
-              fs.writeFileSync(filePath, Buffer.from(base64Data, "base64"));
-
-              const forwardedProto = req.headers["x-forwarded-proto"] || (req.secure ? "https" : "http");
-              const proto = String(forwardedProto).split(",")[0].trim();
-              const forwardedHost = req.headers["x-forwarded-host"] || req.get("host");
-              const host = String(forwardedHost).split(",")[0].trim();
-              resolvedImageUrl = `${proto}://${host}/uploads/${filename}`;
-            }
-          } catch {
-            // ignore
-          }
-        }
+      // Handle Image conversion if needed
+      let resolvedImageUrl = imageUrl;
+      if (imageUrl && (imageUrl.startsWith("data:image") || imageUrl.length > 100)) {
+        try {
+          const cdnUrl = await uploadToPublicCdn(imageUrl);
+          if (cdnUrl) resolvedImageUrl = cdnUrl;
+        } catch {}
       }
 
-      if (resolvedImageUrl) {
-        payload.big_picture = resolvedImageUrl;
-        payload.large_icon = resolvedImageUrl;
-        payload.chrome_web_image = resolvedImageUrl;
-        payload.chrome_big_picture = resolvedImageUrl;
-        payload.adm_big_picture = resolvedImageUrl;
-        payload.ios_attachments = { id1: resolvedImageUrl };
-      } else {
-        payload.large_icon = BRAND_LOGO_URL;
-      }
+      const { success, result } = await sendOneSignalNotification({
+        title,
+        message,
+        recipientIds: target_ids,
+        imageUrl: resolvedImageUrl,
+        data,
+        customAppId: appId,
+        customApiKey: restApiKey
+      });
 
-      if (target_ids && target_ids.length > 0) {
-        payload.include_external_user_ids = target_ids;
-        payload.include_aliases = {
-          external_id: target_ids
-        };
-      } else {
-        payload.included_segments = ["Total Subscriptions", "Subscribed Users", "All"];
-      }
-
-      let pushDelivered = false;
-      let pushResult: any = null;
-      let recipients = 0;
-
-      const keysToTry = [onesignalApiKey, PERMANENT_ONESIGNAL_REST_API_KEY];
-      const authHeaders: string[] = [];
-      for (const k of keysToTry) {
-        if (!k) continue;
-        const cleanK = k.trim().replace(/\s+/g, '');
-        authHeaders.push(`Key ${cleanK}`);
-        authHeaders.push(`Basic ${cleanK}`);
-      }
-
-      for (const authHeader of authHeaders) {
-          try {
-            const response = await fetch("https://api.onesignal.com/notifications", {
-              method: "POST",
-              headers: {
-                "Authorization": authHeader,
-                "Content-Type": "application/json; charset=utf-8"
-              },
-              body: JSON.stringify(payload)
-            });
-
-            try { pushResult = await response.json(); } catch { pushResult = null; }
-
-            if (pushResult && pushResult.id) {
-              pushDelivered = true;
-              recipients = typeof pushResult.recipients === "number" ? pushResult.recipients : 0;
-              break;
-            }
-
-            const fallbackRes = await fetch("https://onesignal.com/api/v1/notifications", {
-              method: "POST",
-              headers: {
-                "Authorization": authHeader,
-                "Content-Type": "application/json; charset=utf-8"
-              },
-              body: JSON.stringify(payload)
-            });
-
-            try { 
-              const fbJson = await fallbackRes.json();
-              if (fbJson && fbJson.id) {
-                pushResult = fbJson;
-                pushDelivered = true;
-                recipients = typeof fbJson.recipients === "number" ? fbJson.recipients : 0;
-                break;
-              } else if (!pushResult) {
-                pushResult = fbJson;
-              }
-            } catch {}
-          } catch (err: any) {
-            if (!pushResult) pushResult = { error: err.message };
-          }
-        }
-
-      return res.status(200).json({ 
+      res.status(200).json({ 
         success: true, 
-        pushDelivered, 
-        recipients,
-        result: pushResult,
-        message: pushDelivered 
-          ? `Push notification sent to ${recipients} device(s).` 
-          : "Saved in-app notification."
+        pushDelivered: success, 
+        recipients: success ? (result?.recipients || 1) : 0,
+        result: result,
+        message: success ? "Push notification sent." : "Saved in-app notification."
       });
     } catch (error: any) {
       res.status(200).json({ success: true, message: "In-app notification saved." });
+    }
+  });
+
+  // Daily Automatic Push Notification status endpoint
+  app.get("/api/notifications/daily-status", async (req, res) => {
+    try {
+      const now = new Date();
+      const bstDateStr = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Dhaka",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).format(now);
+      const bstHour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Dhaka", hour: "numeric", hour12: false }).format(now));
+      
+      res.json({
+        success: true,
+        date: bstDateStr,
+        hour: bstHour,
+        lastSentDate: dailyNotificationLastSentDate,
+        alreadySentToday: dailyNotificationLastSentDate === bstDateStr
+      });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
     }
   });
 

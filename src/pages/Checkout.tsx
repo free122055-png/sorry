@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, MapPin, CreditCard, Banknote, ChevronRight, CheckCircle2, User, Phone, Building2 } from "lucide-react";
+import { ArrowLeft, MapPin, CreditCard, Banknote, ChevronRight, CheckCircle2, User, Phone, Building2, Tag, X, AlertCircle } from "lucide-react";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
+import { useVoiceGuidance } from "../context/VoiceGuidanceContext";
 import { db } from "../lib/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { Order } from "../types";
+import { collection, addDoc } from "firebase/firestore";
+import { getActivePromoCodes, validatePromoCode, PromoCodeItem } from "../lib/promoService";
 
 const paymentMethods = [
   { id: "cod", name: "Cash on Delivery (ক্যাশ অন ডেলিভারি)", icon: Banknote, description: "পণ্য হাতে পেয়ে মূল্য পরিশোধ করুন" },
@@ -19,11 +20,105 @@ export const Checkout: React.FC = () => {
   const isFood = location.pathname.startsWith("/food/");
   const { items, subtotal, clearCart } = useCart();
   const { user, profile, requireAuth } = useAuth();
+  const { speak } = useVoiceGuidance();
   
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [isSuccess, setIsSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderId, setOrderId] = useState("");
+
+  // Promo Code State
+  const passedPromo = (location.state as any)?.appliedPromo;
+  const passedDiscount = Number((location.state as any)?.discount) || 0;
+  const passedCode = (location.state as any)?.promoCode || "";
+
+  const [appliedPromo, setAppliedPromo] = useState<PromoCodeItem | null>(passedPromo || null);
+  const [promoCodeInput, setPromoCodeInput] = useState(passedCode || "");
+  const [discountAmount, setDiscountAmount] = useState(passedDiscount);
+  const [promoError, setPromoError] = useState("");
+  const [promoSuccess, setPromoSuccess] = useState("");
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
+  // Initialize from sessionStorage if state was empty
+  useEffect(() => {
+    if (!appliedPromo && discountAmount === 0 && typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("active_applied_promo");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.discount) {
+            setAppliedPromo(parsed.promo);
+            setDiscountAmount(parsed.discount);
+            setPromoCodeInput(parsed.code || "");
+            setPromoSuccess(`প্রমো কোড "${parsed.code}" সক্রিয় রয়েছে।`);
+          }
+        }
+      } catch (e) {}
+    }
+  }, [appliedPromo, discountAmount]);
+
+  const handleApplyPromo = async () => {
+    setPromoError("");
+    setPromoSuccess("");
+    const code = promoCodeInput.trim().toUpperCase();
+
+    if (!code) {
+      setPromoError("অনুগ্রহ করে একটি প্রমো কোড লিখুন।");
+      return;
+    }
+
+    setIsApplyingPromo(true);
+
+    try {
+      const promoList = await getActivePromoCodes();
+      const validation = validatePromoCode(code, promoList, {
+        subtotal,
+        items
+      });
+
+      if (!validation.isValid) {
+        setAppliedPromo(null);
+        setDiscountAmount(0);
+        setPromoError(validation.error || "অবৈধ বা মেয়াদোত্তীর্ণ প্রমো কোড।");
+        return;
+      }
+
+      setAppliedPromo(validation.promo || null);
+      setDiscountAmount(validation.discountAmount);
+      setPromoSuccess(`🎉 '${validation.promo?.code}' প্রমো কোড প্রয়োগ করা হয়েছে! (${validation.discountText})`);
+
+      try {
+        sessionStorage.setItem("active_applied_promo", JSON.stringify({
+          promo: validation.promo,
+          discount: validation.discountAmount,
+          code: validation.promo?.code
+        }));
+      } catch (e) {}
+    } catch (err) {
+      console.error("Promo apply error:", err);
+      setPromoError("প্রমো কোড যাচাই করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setDiscountAmount(0);
+    setPromoCodeInput("");
+    setPromoError("");
+    setPromoSuccess("");
+    try {
+      sessionStorage.removeItem("active_applied_promo");
+    } catch (e) {}
+  };
+
+  // Announce success when order is placed
+  useEffect(() => {
+    if (isSuccess) {
+      speak("অভিনন্দন! আপনার অর্ডার সফলভাবে গ্রহণ করা হয়েছে।", { key: "order-success", priority: "high", force: true, mood: "SUCCESS" });
+    }
+  }, [isSuccess, speak]);
 
   // Address fields
   const [district, setDistrict] = useState("");
@@ -46,7 +141,7 @@ export const Checkout: React.FC = () => {
     setIsSubmitting(true);
     try {
       const deliveryCharge = 60;
-      const total = subtotal + deliveryCharge;
+      const total = Math.max(0, subtotal + deliveryCharge - discountAmount);
       const orderNumber = `AMB-${Date.now().toString().slice(-6)}`;
       
       const orderData: any = {
@@ -58,7 +153,8 @@ export const Checkout: React.FC = () => {
         items,
         subtotal,
         deliveryCharge,
-        discount: 0,
+        discount: discountAmount,
+        appliedPromoCode: appliedPromo?.code || (discountAmount > 0 ? promoCodeInput : null),
         total,
         grandTotal: total,
         status: 'pending',
@@ -90,6 +186,7 @@ export const Checkout: React.FC = () => {
       const docRef = await addDoc(collection(db, "food_orders"), orderData);
       try {
         localStorage.setItem("last_placed_order_id", docRef.id);
+        sessionStorage.removeItem("active_applied_promo");
       } catch (e) {}
       setOrderId(orderNumber);
       setIsSuccess(true);
@@ -216,6 +313,55 @@ export const Checkout: React.FC = () => {
           </div>
         </div>
 
+        {/* Promo Code Input */}
+        <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Tag className="w-5 h-5 text-[#004b23]" />
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider">প্রমো কোড (Promo Code)</h3>
+          </div>
+          
+          {!appliedPromo ? (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={promoCodeInput}
+                  onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                  placeholder="কোড লিখুন (যেমন: SAVE10)"
+                  className="flex-1 px-4 py-3 rounded-2xl bg-gray-50 border border-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#004b23]/20 uppercase font-bold"
+                />
+                <button 
+                  onClick={handleApplyPromo}
+                  disabled={isApplyingPromo || !promoCodeInput.trim()}
+                  className="bg-[#004b23] text-white px-6 py-3 rounded-2xl text-sm font-bold active:scale-95 transition-transform disabled:opacity-50"
+                >
+                  {isApplyingPromo ? "..." : "প্রয়োগ"}
+                </button>
+              </div>
+              {promoError && <p className="text-red-500 text-[10px] font-bold ml-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {promoError}</p>}
+            </div>
+          ) : (
+            <div className="bg-green-50 border border-green-100 rounded-2xl p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-green-800">প্রমো কোড: {appliedPromo.code}</p>
+                  <p className="text-[10px] text-green-600">৳{discountAmount} ছাড় প্রযোজ্য হয়েছে</p>
+                </div>
+              </div>
+              <button 
+                onClick={handleRemovePromo}
+                className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+          {promoSuccess && !promoError && <p className="text-green-600 text-[10px] font-bold ml-1">{promoSuccess}</p>}
+        </div>
+
         {/* Order Summary */}
         <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm space-y-3">
           <div className="flex justify-between text-sm">
@@ -226,9 +372,15 @@ export const Checkout: React.FC = () => {
             <span className="text-gray-500">ডেলিভারি চার্জ</span>
             <span className="font-bold text-gray-800">৳60</span>
           </div>
+          {discountAmount > 0 && (
+            <div className="flex justify-between text-sm text-green-600 font-bold">
+              <span>ছাড় (Discount)</span>
+              <span>- ৳{discountAmount}</span>
+            </div>
+          )}
           <div className="border-t pt-3 flex justify-between items-center">
             <span className="text-lg font-bold text-gray-800">সর্বমোট প্রদেয়</span>
-            <span className="text-2xl font-black text-[#004b23]">৳{subtotal + 60}</span>
+            <span className="text-2xl font-black text-[#004b23]">৳{Math.max(0, subtotal + 60 - discountAmount)}</span>
           </div>
         </div>
 

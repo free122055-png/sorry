@@ -3,7 +3,7 @@ import {
   ArrowLeft, Cast, Download, Heart, MoreVertical, Play, Pause, 
   RotateCcw, RotateCw, SkipBack, SkipForward, Volume2, VolumeX, 
   Maximize, Minimize, Tv2, BookOpen, ChevronRight, Share2, 
-  Check, Film, Loader2, RefreshCw
+  Check, Film, Loader2, RefreshCw, AlertCircle
 } from "lucide-react";
 import { db } from "../../lib/firebase";
 import { collection, query, orderBy, onSnapshot, getDocs } from "firebase/firestore";
@@ -35,6 +35,30 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
   onBack,
   onSwitchToAudio
 }) => {
+  // Helper to ensure HTTPS and valid full URL for Android WebView, PWA and Play Console
+  const normalizeVideoUrl = (rawUrl?: string): string => {
+    if (!rawUrl) return "";
+    let url = rawUrl.trim();
+    if (url.startsWith("http://")) {
+      url = url.replace("http://", "https://");
+    }
+    if (url.startsWith("/uploads/")) {
+      if (typeof window !== "undefined" && window.location.origin) {
+        return `${window.location.origin}${url}`;
+      }
+    }
+    return url;
+  };
+
+  const getYouTubeEmbedUrl = (rawUrl?: string): string | null => {
+    if (!rawUrl) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = rawUrl.match(regExp);
+    return match && match[2].length === 11
+      ? `https://www.youtube.com/embed/${match[2]}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&playsinline=1`
+      : null;
+  };
+
   // Real Firestore Videos state (Demo data removed completely)
   const [videos, setVideos] = useState<VideoTilawatItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -47,6 +71,8 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showControls, setShowControls] = useState<boolean>(true);
+  const [isBuffering, setIsBuffering] = useState<boolean>(false);
+  const [hasPlaybackError, setHasPlaybackError] = useState<boolean>(false);
 
   // LocalStorage-backed user favorites
   const [favorites, setFavorites] = useState<Record<string, boolean>>(() => {
@@ -74,13 +100,15 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
         snapshot.forEach((doc) => {
           list.push({ id: doc.id, ...doc.data() } as VideoTilawatItem);
         });
-        setVideos(list);
+        // Filter out drafts - only show published videos to users
+        const publishedList = list.filter((v: any) => v.publishedStatus !== "draft");
+        setVideos(publishedList);
         setLoading(false);
-        if (list.length > 0) {
+        if (publishedList.length > 0) {
           setCurrentVideo((prev) => {
-            if (!prev) return list[0];
-            const match = list.find((v) => v.id === prev.id);
-            return match || list[0];
+            if (!prev) return publishedList[0];
+            const match = publishedList.find((v) => v.id === prev.id);
+            return match || publishedList[0];
           });
         } else {
           setCurrentVideo(null);
@@ -95,11 +123,12 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
               list.push({ id: doc.id, ...doc.data() } as VideoTilawatItem);
             });
             // Client-side sort by createdAt descending
-            list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-            setVideos(list);
+            list.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+            const publishedList = list.filter((v: any) => v.publishedStatus !== "draft");
+            setVideos(publishedList);
             setLoading(false);
-            if (list.length > 0) {
-              setCurrentVideo((prev) => prev || list[0]);
+            if (publishedList.length > 0) {
+              setCurrentVideo((prev) => prev || publishedList[0]);
             } else {
               setCurrentVideo(null);
             }
@@ -155,7 +184,10 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
     setIsPlaying(true);
     if (videoRef.current) {
       videoRef.current.currentTime = 0;
-      videoRef.current.play().catch(() => {});
+      const p = videoRef.current.play();
+      if (p !== undefined) {
+        p.catch((e) => console.warn("Select play prevented:", e));
+      }
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -164,7 +196,17 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
   const togglePlay = () => {
     if (videoRef.current) {
       if (videoRef.current.paused) {
-        videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+        const p = videoRef.current.play();
+        if (p !== undefined) {
+          p.then(() => setIsPlaying(true)).catch((err) => {
+            console.warn("Play error, trying muted play for WebView compliance:", err);
+            if (videoRef.current) {
+              videoRef.current.muted = true;
+              setIsMuted(true);
+              videoRef.current.play().then(() => setIsPlaying(true)).catch(console.error);
+            }
+          });
+        }
       } else {
         videoRef.current.pause();
         setIsPlaying(false);
@@ -343,7 +385,7 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
 
           {currentVideo?.videoUrl && (
             <a
-              href={currentVideo.videoUrl}
+              href={normalizeVideoUrl(currentVideo.videoUrl)}
               download
               target="_blank"
               rel="noopener noreferrer"
@@ -428,43 +470,111 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
               onMouseMove={resetControlsTimeout}
               onClick={resetControlsTimeout}
             >
-              {/* Actual HTML5 Video Element for real playback */}
-              {currentVideo.videoUrl ? (
-                <video
-                  ref={videoRef}
-                  src={currentVideo.videoUrl}
-                  poster={currentVideo.thumbnailUrl}
-                  playsInline
-                  webkit-playsinline="true"
-                  x5-playsinline="true"
-                  controlsList="nodownload"
-                  preload="metadata"
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoadedMetadata}
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onEnded={handleVideoEnded}
-                  onClick={togglePlay}
-                  style={{
-                    transform: "translateZ(0)",
-                    WebkitTransform: "translateZ(0)",
-                    willChange: "transform",
-                    backgroundColor: "#000000",
-                  }}
-                  className="w-full h-full object-cover sm:object-contain bg-black cursor-pointer"
-                />
-              ) : (
-                <div className="absolute inset-0 cursor-pointer" onClick={togglePlay}>
-                  <img
-                    src={currentVideo.thumbnailUrl}
-                    alt={currentVideo.surahName}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover opacity-85"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/60 pointer-events-none" />
-                  <div className="absolute inset-0 bg-cyan-950/20 pointer-events-none" />
-                </div>
-              )}
+              {/* Actual Video Playback - Direct File or YouTube */}
+              {(() => {
+                const normUrl = normalizeVideoUrl(currentVideo.videoUrl);
+                const ytUrl = getYouTubeEmbedUrl(normUrl);
+                const defaultPoster = "https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=1200&q=80";
+                const posterUrl = currentVideo.thumbnailUrl || defaultPoster;
+
+                if (ytUrl) {
+                  return (
+                    <iframe
+                      src={ytUrl}
+                      title={currentVideo.surahName}
+                      className="w-full h-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  );
+                }
+
+                if (normUrl) {
+                  return (
+                    <>
+                      <video
+                        ref={videoRef}
+                        key={currentVideo.id + normUrl}
+                        src={normUrl}
+                        poster={posterUrl}
+                        playsInline
+                        webkit-playsinline="true"
+                        x5-playsinline="true"
+                        controlsList="nodownload"
+                        preload="auto"
+                        onTimeUpdate={handleTimeUpdate}
+                        onLoadedMetadata={handleLoadedMetadata}
+                        onWaiting={() => setIsBuffering(true)}
+                        onPlaying={() => {
+                          setIsBuffering(false);
+                          setHasPlaybackError(false);
+                        }}
+                        onCanPlay={() => setIsBuffering(false)}
+                        onError={() => {
+                          setIsBuffering(false);
+                          setHasPlaybackError(true);
+                        }}
+                        onPlay={() => {
+                          setIsPlaying(true);
+                          setHasPlaybackError(false);
+                        }}
+                        onPause={() => setIsPlaying(false)}
+                        onEnded={handleVideoEnded}
+                        onClick={togglePlay}
+                        style={{
+                          transform: "translateZ(0)",
+                          WebkitTransform: "translateZ(0)",
+                          willChange: "transform",
+                          backgroundColor: "#000000",
+                        }}
+                        className="w-full h-full object-cover sm:object-contain bg-black cursor-pointer"
+                      />
+
+                      {/* Buffering Spinner */}
+                      {isBuffering && isPlaying && !hasPlaybackError && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 pointer-events-none z-20">
+                          <div className="w-12 h-12 rounded-full border-3 border-amber-400 border-t-transparent animate-spin" />
+                          <p className="text-xs text-amber-200 font-bold mt-2">বাফারিং হচ্ছে...</p>
+                        </div>
+                      )}
+
+                      {/* Playback Error Overlay with Retry */}
+                      {hasPlaybackError && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20 p-4 text-center">
+                          <AlertCircle className="w-10 h-10 text-rose-500 mb-2" />
+                          <p className="text-sm font-bold text-white mb-1">ভিডিও প্লে করতে সমস্যা হচ্ছে</p>
+                          <p className="text-xs text-gray-300 mb-3">দয়া করে ইন্টারনেট কানেকশন চেক করুন</p>
+                          <button
+                            onClick={() => {
+                              setHasPlaybackError(false);
+                              if (videoRef.current) {
+                                videoRef.current.load();
+                                videoRef.current.play().catch(() => {});
+                              }
+                            }}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow cursor-pointer transition active:scale-95"
+                          >
+                            পুনরায় চেষ্টা করুন (Retry)
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  );
+                }
+
+                return (
+                  <div className="absolute inset-0 cursor-pointer" onClick={togglePlay}>
+                    <img
+                      src={posterUrl}
+                      alt={currentVideo.surahName}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover opacity-85"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-black/60 pointer-events-none" />
+                    <div className="absolute inset-0 bg-cyan-950/20 pointer-events-none" />
+                  </div>
+                );
+              })()}
 
               {/* Top Overlay: Calligraphy & HD 1080p Badge */}
               <div className={`absolute top-3 left-4 right-4 flex items-start justify-between pointer-events-none z-10 transition-opacity duration-300 ${

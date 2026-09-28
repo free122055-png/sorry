@@ -95,7 +95,9 @@ export const AnimatedSearchInput: React.FC<AnimatedSearchInputProps> = ({
           onChange={onChange}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
-          className={`w-full bg-white text-gray-800 rounded-2xl py-3 pl-10 pr-10 text-xs sm:text-sm font-bold shadow-xs focus:outline-none focus:ring-2 focus:ring-[#004b23] transition-all ${inputClassName}`}
+          className={`w-full text-gray-800 focus:outline-none transition-all duration-500 ${
+            inputClassName || "bg-gradient-to-r from-emerald-50 via-white to-emerald-50 rounded-full py-4 pl-12 pr-4 text-xs sm:text-sm font-black shadow-[0_4px_20px_rgba(16,185,129,0.25)] border-2 border-emerald-500/30 focus:border-emerald-500 focus:shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+          }`}
         />
 
         {/* Animated Placeholder overlay when input is empty and not focused */}

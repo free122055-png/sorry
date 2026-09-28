@@ -185,6 +185,14 @@ public class MainActivity extends BridgeActivity {
                 // Set enhanced video WebChromeClient with fullscreen attach/detach support
                 videoChromeClient = new VideoWebChromeClient(getBridge());
                 webView.setWebChromeClient(videoChromeClient);
+
+                // Register Native Voice Guidance Bridge for 100% offline & Play Console Production TTS
+                try {
+                    AndroidNativeVoiceBridge voiceBridge = new AndroidNativeVoiceBridge(this);
+                    webView.addJavascriptInterface(voiceBridge, "AndroidNativeVoiceBridge");
+                } catch (Exception ve) {
+                    Log.w(TAG, "Notice adding voice bridge: " + ve.getMessage());
+                }
             }
         } catch (Exception e) {
             Log.e(TAG, "Failed to configure hardware-accelerated video webview: " + e.getMessage());

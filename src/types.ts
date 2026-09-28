@@ -21,6 +21,7 @@ export interface UserProfile {
   phoneVerifiedAt?: number;
   emailSkipped?: boolean;
   emailPromptDismissedAt?: number;
+  reminderCode?: string;
   createdAt: number;
   updatedAt: number;
   lastLoginAt?: number;
@@ -87,6 +88,8 @@ export interface Product {
 export interface CartItem {
   productId: string;
   variantId?: string;
+  categoryId?: string;
+  categoryName?: string;
   selectedSize?: string;
   selectedColor?: string;
   weight?: string;

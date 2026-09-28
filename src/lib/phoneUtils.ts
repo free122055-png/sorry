@@ -87,6 +87,27 @@ export function getBanglaAuthErrorMessage(err: any, type: 'login' | 'register', 
     };
   }
 
+  if (code.includes("popup-blocked")) {
+    return {
+      message: "আপনার ব্রাউজার পপ-আপ ব্লক করেছে। দয়া করে পপ-আপ অ্যালাউ করুন অথবা রিডাইরেক্ট মোড ট্রাই করুন।",
+      errorType: 'general'
+    };
+  }
+
+  if (code.includes("popup-closed-by-user") || code.includes("cancelled-popup-request")) {
+    return {
+      message: "আপনি সাইন-ইন উইন্ডোটি বন্ধ করে দিয়েছেন। পুনরায় চেষ্টা করুন।",
+      errorType: 'general'
+    };
+  }
+
+  if (code.includes("account-exists-with-different-credential")) {
+    return {
+      message: "এই ইমেইলটি অন্য একটি সাইন-ইন মেথডের সাথে যুক্ত। দয়া করে সঠিক মেথড ব্যবহার করুন।",
+      errorType: 'already-exists'
+    };
+  }
+
   return {
     message: type === 'login' 
       ? "লগইন করতে সমস্যা হয়েছে। অনুগ্রহ করে ইন্টারনেট কানেকশন চেক করে আবার চেষ্টা করুন।" 

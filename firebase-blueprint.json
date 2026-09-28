@@ -13,6 +13,8 @@
         "phoneNumber": { "type": "string" },
         "photoURL": { "type": "string" },
         "address": { "type": "string" },
+        "connectionCode": { "type": "string" },
+        "birthday": { "type": "string" },
         "password": { "type": "string" },
         "userPassword": { "type": "string" },
         "createdAt": { "type": "number" },
@@ -20,6 +22,45 @@
         "lastLoginAt": { "type": "number" }
       },
       "required": ["id", "email"]
+    },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "Personal or shared reminder",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "recipientId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "scheduledAt": { "type": "number" },
+        "repeat": { "type": "string" },
+        "priority": { "type": "string" },
+        "type": { "type": "string", "enum": ["personal", "wish"] },
+        "wishType": { "type": "string" },
+        "templateId": { "type": "string" },
+        "customMessage": { "type": "string" },
+        "senderName": { "type": "string" },
+        "recipientName": { "type": "string" },
+        "signature": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "Connection": {
+      "title": "Connection",
+      "description": "Connection between two users for reminders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userA": { "type": "string" },
+        "userB": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "blocked"] },
+        "createdAt": { "type": "number" }
+      }
     },
     "Category": {
       "title": "Category",
@@ -147,12 +188,197 @@
         "tags": { "type": "array" },
         "createdAt": { "type": "number" }
       }
+    },
+    "Caption": {
+      "title": "Caption",
+      "description": "Social and status captions in Caption Ghor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "category": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "categorySlug": { "type": "string" },
+        "isPopular": { "type": "boolean" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "copyCount": { "type": "number" }
+      }
+    },
+    "CaptionCategory": {
+      "title": "CaptionCategory",
+      "description": "Categories for captions in Caption Ghor",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "color": { "type": "string" },
+        "icon": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "sortOrder": { "type": "number" }
+      }
+    },
+    "TelecomOffer": {
+      "title": "TelecomOffer",
+      "description": "Mobile operator internet, minute, and bundle packages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "operator": { "type": "string" },
+        "category": { "type": "string" },
+        "name": { "type": "string" },
+        "amount": { "type": "string" },
+        "validity": { "type": "string" },
+        "price": { "type": "number" },
+        "logo": { "type": "string" },
+        "description": { "type": "string" },
+        "loanRule": { "type": "string" },
+        "loanNote": { "type": "string" },
+        "prepaidPostpaid": { "type": "string" },
+        "targetSim": { "type": "string" },
+        "activationNote": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "TelecomPaymentMethod": {
+      "title": "TelecomPaymentMethod",
+      "description": "Payment methods for telecom recharge and packages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "methodName": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "instruction": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      }
+    },
+    "TelecomOrder": {
+      "title": "TelecomOrder",
+      "description": "Customer orders for internet and minute packages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "offerId": { "type": "string" },
+        "operator": { "type": "string" },
+        "category": { "type": "string" },
+        "offerName": { "type": "string" },
+        "price": { "type": "number" },
+        "targetNumber": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "paymentNumber": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "screenshotUrl": { "type": "string" },
+        "status": { "type": "string" },
+        "rejectReason": { "type": "string" },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "Biodata": {
+      "title": "Biodata",
+      "description": "Matrimonial Shariah Marriage Biodatas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "biodataCode": { "type": "string" },
+        "userId": { "type": "string" },
+        "gender": { "type": "string" },
+        "status": { "type": "string" },
+        "isVerified": { "type": "boolean" },
+        "isFeatured": { "type": "boolean" },
+        "fullName": { "type": "string" },
+        "maritalStatus": { "type": "string" },
+        "age": { "type": "number" },
+        "height": { "type": "string" },
+        "weight": { "type": "string" },
+        "complexion": { "type": "string" },
+        "bloodGroup": { "type": "string" },
+        "presentDistrict": { "type": "string" },
+        "presentUpazila": { "type": "string" },
+        "permanentDistrict": { "type": "string" },
+        "educationMethod": { "type": "string" },
+        "highestDegree": { "type": "string" },
+        "institute": { "type": "string" },
+        "occupation": { "type": "string" },
+        "monthlyIncome": { "type": "string" },
+        "fatherOccupation": { "type": "string" },
+        "motherOccupation": { "type": "string" },
+        "brothersCount": { "type": "number" },
+        "sistersCount": { "type": "number" },
+        "familyDetails": { "type": "string" },
+        "familyStatus": { "type": "string" },
+        "salahRegularity": { "type": "string" },
+        "hijabOrBeard": { "type": "string" },
+        "quranRecitation": { "type": "string" },
+        "mahramNonMahramCompliance": { "type": "string" },
+        "aboutSelf": { "type": "string" },
+        "expectedAgeRange": { "type": "string" },
+        "expectedHeight": { "type": "string" },
+        "expectedEducation": { "type": "string" },
+        "expectedReligiousQualities": { "type": "string" },
+        "guardianName": { "type": "string" },
+        "guardianRelation": { "type": "string" },
+        "guardianPhone": { "type": "string" },
+        "photoBlurred": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      }
+    },
+    "BiodataRequest": {
+      "title": "BiodataRequest",
+      "description": "Requests for guardian contact numbers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "biodataId": { "type": "string" },
+        "biodataCode": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "status": { "type": "string" },
+        "candidateGuardianName": { "type": "string" },
+        "candidateGuardianPhone": { "type": "string" },
+        "candidateGuardianRelation": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      }
+    },
+    "PromoCode": {
+      "title": "Promo Code",
+      "description": "Discount promo codes configured by admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "categoryName": { "type": "string" },
+        "discountType": { "type": "string", "enum": ["percentage", "fixed"] },
+        "discountValue": { "type": "number" },
+        "minOrderAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["code", "discountType", "discountValue", "status"]
     }
   },
   "firestore": {
     "users/{userId}": {
       "schema": "User",
       "description": "User profiles"
+    },
+    "reminders_v2/{reminderId}": {
+      "schema": "Reminder",
+      "description": "Premium reminders and wishes"
+    },
+    "connections/{connectionId}": {
+      "schema": "Connection",
+      "description": "User connections"
     },
     "categories/{categoryId}": {
       "schema": "Category",
@@ -197,6 +423,30 @@
     "biodata_requests/{requestId}": {
       "schema": "BiodataRequest",
       "description": "Requests for guardian contact numbers"
+    },
+    "captions/{captionId}": {
+      "schema": "Caption",
+      "description": "Captions collection in Caption Ghor"
+    },
+    "caption_categories/{categoryId}": {
+      "schema": "CaptionCategory",
+      "description": "Categories for Caption Ghor"
+    },
+    "telecom_offers/{offerId}": {
+      "schema": "TelecomOffer",
+      "description": "Telecom internet and minute offers"
+    },
+    "telecom_payment_methods/{methodId}": {
+      "schema": "TelecomPaymentMethod",
+      "description": "Payment methods for telecom packages"
+    },
+    "telecom_orders/{orderId}": {
+      "schema": "TelecomOrder",
+      "description": "Customer orders for telecom packages"
+    },
+    "promo_codes/{promoId}": {
+      "schema": "PromoCode",
+      "description": "Promo codes for discount validation"
     }
   }
 }

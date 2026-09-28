@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { db } from "../../lib/firebase";
 import { 
-  collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc 
+  collection, getDocs, addDoc, updateDoc, deleteDoc, doc, setDoc, onSnapshot 
 } from "firebase/firestore";
 import { DEFAULT_CAPTION_CATEGORIES, CaptionCategory } from "../../data/captionsData";
 
@@ -32,7 +32,7 @@ export const CaptionManagement: React.FC = () => {
   // Caption Form State
   const [editingCaptionId, setEditingCaptionId] = useState<string | null>(null);
   const [captionText, setCaptionText] = useState("");
-  const [selectedCatId, setSelectedCatId] = useState("");
+  const [selectedCatId, setSelectedCatId] = useState(DEFAULT_CAPTION_CATEGORIES[0]?.id || "");
   const [isPopular, setIsPopular] = useState(false);
   const [isActive, setIsActive] = useState(true);
 
@@ -49,13 +49,12 @@ export const CaptionManagement: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const fetchData = async () => {
+  useEffect(() => {
     setLoading(true);
-    try {
-      const catSnap = await getDocs(collection(db, "caption_categories"));
-      const loadedCats = catSnap.docs.map(d => ({ id: d.id, ...d.data() } as CaptionCategory));
-      
-      // Combine DEFAULT_CAPTION_CATEGORIES with custom Firestore categories
+
+    // Real-time listener for caption categories
+    const unsubCats = onSnapshot(collection(db, "caption_categories"), (snap) => {
+      const loadedCats = snap.docs.map(d => ({ id: d.id, ...d.data() } as CaptionCategory));
       const combinedCats = [...DEFAULT_CAPTION_CATEGORIES];
       loadedCats.forEach(c => {
         if (!combinedCats.some(dc => dc.id === c.id || dc.slug === c.slug)) {
@@ -63,30 +62,36 @@ export const CaptionManagement: React.FC = () => {
         }
       });
       setCategories(combinedCats);
-
-      const capSnap = await getDocs(collection(db, "captions"));
-      const loadedCaps = capSnap.docs.map(d => ({ id: d.id, ...d.data() } as CaptionItem));
-      setCaptions(loadedCaps);
-    } catch (err) {
-      console.error("Error fetching caption data:", err);
+    }, (err) => {
+      console.warn("Caption categories listener notice:", err);
       setCategories(DEFAULT_CAPTION_CATEGORIES);
-    } finally {
-      setLoading(false);
-    }
-  };
+    });
 
-  useEffect(() => {
-    fetchData();
+    // Real-time listener for captions
+    const unsubCaps = onSnapshot(collection(db, "captions"), (snap) => {
+      const loadedCaps = snap.docs.map(d => ({ id: d.id, ...d.data() } as CaptionItem));
+      setCaptions(loadedCaps);
+      setLoading(false);
+    }, (err) => {
+      console.warn("Captions listener notice:", err);
+      setLoading(false);
+    });
+
+    return () => {
+      unsubCats();
+      unsubCaps();
+    };
   }, []);
 
   const handleSaveCaption = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!captionText.trim() || !selectedCatId) {
-      showToast("ক্যাপশন টেক্সট এবং ক্যাটাগরি আবশ্যক!");
+    const effectiveCatId = selectedCatId || categories[0]?.id || "cat_love";
+    if (!captionText.trim()) {
+      showToast("ক্যাপশন টেক্সট লিখুন!");
       return;
     }
 
-    const catObj = categories.find(c => c.id === selectedCatId);
+    const catObj = categories.find(c => c.id === effectiveCatId);
     const catName = catObj ? catObj.name : "অন্যান্য";
     const catSlug = catObj ? catObj.slug : "other";
 
@@ -95,7 +100,7 @@ export const CaptionManagement: React.FC = () => {
         await updateDoc(doc(db, "captions", editingCaptionId), {
           text: captionText.trim(),
           category: catName,
-          categoryId: selectedCatId,
+          categoryId: effectiveCatId,
           categorySlug: catSlug,
           isPopular,
           isActive
@@ -105,7 +110,7 @@ export const CaptionManagement: React.FC = () => {
         await addDoc(collection(db, "captions"), {
           text: captionText.trim(),
           category: catName,
-          categoryId: selectedCatId,
+          categoryId: effectiveCatId,
           categorySlug: catSlug,
           isPopular,
           isActive,
@@ -118,7 +123,6 @@ export const CaptionManagement: React.FC = () => {
       setCaptionText("");
       setEditingCaptionId(null);
       setIsPopular(false);
-      fetchData();
     } catch (err) {
       console.error(err);
       showToast("সংরক্ষণ করতে সমস্যা হয়েছে।");
@@ -138,7 +142,6 @@ export const CaptionManagement: React.FC = () => {
     try {
       await deleteDoc(doc(db, "captions", id));
       showToast("ক্যাপশন ডিলিট করা হয়েছে।");
-      fetchData();
     } catch (err) {
       console.error(err);
       showToast("ডিলিট করতে সমস্যা হয়েছে।");
@@ -178,7 +181,6 @@ export const CaptionManagement: React.FC = () => {
       setCatName("");
       setCatSlug("");
       setEditingCatId(null);
-      fetchData();
     } catch (err) {
       console.error(err);
       showToast("ক্যাটাগরি সংরক্ষণ করতে সমস্যা হয়েছে।");
@@ -190,7 +192,6 @@ export const CaptionManagement: React.FC = () => {
     try {
       await deleteDoc(doc(db, "caption_categories", id));
       showToast("ক্যাটাগরি ডিলিট করা হয়েছে।");
-      fetchData();
     } catch (err) {
       console.error(err);
       showToast("ডিলিট করতে সমস্যা হয়েছে।");

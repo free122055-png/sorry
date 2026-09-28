@@ -37,7 +37,7 @@ export const TelecomPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'offers' | 'history'>('offers');
   
   const [offers, setOffers] = useState<TelecomOffer[]>(getTelecomOffers());
-  const [paymentMethods] = useState<TelecomPaymentMethod[]>(getTelecomPaymentMethods());
+  const [paymentMethods, setPaymentMethods] = useState<TelecomPaymentMethod[]>(getTelecomPaymentMethods());
   const [orders, setOrders] = useState<TelecomOrder[]>(getTelecomOrders());
 
   // Flow State (Full Page Steps, NO Popups/Modals)
@@ -52,7 +52,7 @@ export const TelecomPage: React.FC = () => {
   const [screenshotUrl, setScreenshotUrl] = useState('');
   const [submittedOrder, setSubmittedOrder] = useState<TelecomOrder | null>(null);
 
-  // Real-time sync with Firestore for offers and orders
+  // Real-time sync with Firestore for offers, payment methods, and orders
   useEffect(() => {
     const qOffers = query(collection(db, "telecom_offers"), orderBy("createdAt", "desc"));
     const unsubOffers = onSnapshot(qOffers, (snapshot) => {
@@ -65,6 +65,19 @@ export const TelecomPage: React.FC = () => {
       }
     }, (error) => {
       console.warn("Telecom offers fetch notice:", error);
+    });
+
+    const qMethods = collection(db, "telecom_payment_methods");
+    const unsubMethods = onSnapshot(qMethods, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as TelecomPaymentMethod[];
+      if (data.length > 0) {
+        setPaymentMethods(data);
+      }
+    }, (error) => {
+      console.warn("Telecom payment methods fetch notice:", error);
     });
 
     const qOrders = query(collection(db, "telecom_orders"), orderBy("createdAt", "desc"));
@@ -82,6 +95,7 @@ export const TelecomPage: React.FC = () => {
 
     return () => {
       unsubOffers();
+      unsubMethods();
       unsubOrders();
     };
   }, []);

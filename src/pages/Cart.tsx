@@ -4,8 +4,7 @@ import { Trash2, Plus, Minus, ArrowLeft, ShoppingBag, ChevronRight, Ticket, Chec
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
 import { motion, AnimatePresence } from "motion/react";
-import { db } from "../lib/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { getActivePromoCodes, validatePromoCode, PromoCodeItem } from "../lib/promoService";
 
 export const Cart: React.FC = () => {
   const { items, updateQuantity, removeItem, subtotal, totalItems } = useCart();
@@ -17,9 +16,11 @@ export const Cart: React.FC = () => {
 
   // Promo Code State
   const [promoCode, setPromoCode] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<PromoCodeItem | null>(null);
   const [discount, setDiscount] = useState(0);
   const [promoError, setPromoError] = useState("");
   const [promoSuccess, setPromoSuccess] = useState("");
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
 
   const handleApplyPromo = async () => {
     setPromoError("");
@@ -31,69 +32,49 @@ export const Cart: React.FC = () => {
       return;
     }
 
+    setIsApplyingPromo(true);
+
     try {
-      let promoList: any[] = [];
+      const promoList = await getActivePromoCodes();
+      const validation = validatePromoCode(code, promoList, {
+        subtotal,
+        items
+      });
+
+      if (!validation.isValid) {
+        setAppliedPromo(null);
+        setDiscount(0);
+        setPromoError(validation.error || "অবৈধ বা মেয়াদোত্তীর্ণ প্রমো কোড।");
+        return;
+      }
+
+      setAppliedPromo(validation.promo || null);
+      setDiscount(validation.discountAmount);
+      setPromoSuccess(`'${validation.promo?.code}' প্রমো কোড সফলভাবে প্রয়োগ করা হয়েছে! (${validation.discountText})`);
+
       try {
-        const snap = await getDocs(collection(db, "promo_codes"));
-        snap.forEach(docSnap => {
-          promoList.push({ id: docSnap.id, ...docSnap.data() });
-        });
+        sessionStorage.setItem("active_applied_promo", JSON.stringify({
+          promo: validation.promo,
+          discount: validation.discountAmount,
+          code: validation.promo?.code
+        }));
       } catch (e) {}
-
-      if (promoList.length === 0) {
-        const local = localStorage.getItem("admin_promo_codes");
-        if (local) {
-          try { promoList = JSON.parse(local); } catch(e) {}
-        }
-      }
-
-      const found = promoList.find((p: any) => p.code === code && p.status === 'active');
-
-      if (!found) {
-        if (code === "MAYADIN" || code === "SAVE10" || code === "WELCOME") {
-          const calcDiscount = Math.round(subtotal * 0.1);
-          setDiscount(calcDiscount > 0 ? calcDiscount : 50);
-          setPromoSuccess(`'${code}' প্রমো কোড সফলভাবে প্রয়োগ করা হয়েছে! (৳${calcDiscount > 0 ? calcDiscount : 50} ছাড়)`);
-          return;
-        }
-        setPromoError("দুঃখিত, এটি একটি অবৈধ বা নিষ্ক্রিয় প্রমো কোড।");
-        return;
-      }
-
-      if (found.minOrderAmount && subtotal < found.minOrderAmount) {
-        setPromoError(`এই প্রমো কোড ব্যবহারের জন্য সর্বনিম্ন অর্ডার হতে হবে ৳${found.minOrderAmount}`);
-        return;
-      }
-
-      if (found.categoryId && found.categoryId !== 'all') {
-        const hasMatchingCategoryItem = items.some((item: any) => 
-          item.categoryId === found.categoryId || 
-          item.category === found.categoryName ||
-          (item.categoryId === 'cat2' && found.categoryId === 'cat2')
-        );
-        if (!hasMatchingCategoryItem) {
-          setPromoError(`এই প্রমো কোডটি শুধুমাত্র '${found.categoryName}' ক্যাটাগরির পণ্যের জন্য প্রযোজ্য।`);
-          return;
-        }
-      }
-
-      let calcDiscount = 0;
-      if (found.discountType === 'percentage') {
-        calcDiscount = Math.round((subtotal * found.discountValue) / 100);
-      } else {
-        calcDiscount = Number(found.discountValue) || 0;
-      }
-
-      setDiscount(calcDiscount);
-      setPromoSuccess(`'${found.code}' প্রমো কোড সফলভাবে প্রয়োগ করা হয়েছে! (${found.discountType === 'percentage' ? found.discountValue + '% ছাড়' : '৳' + found.discountValue + ' ছাড়'})`);
     } catch (err) {
       setPromoError("প্রমো কোড যাচাই করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+    } finally {
+      setIsApplyingPromo(false);
     }
   };
 
   const handleProceedToCheckout = () => {
     requireAuth(() => {
-      navigate(isFood ? "/food/checkout" : "/checkout");
+      navigate(isFood ? "/food/checkout" : "/checkout", {
+        state: {
+          appliedPromo,
+          discount,
+          promoCode: appliedPromo?.code || (discount > 0 ? promoCode : "")
+        }
+      });
     }, "অর্ডার সম্পন্ন করতে প্রথমে আপনার অ্যাকাউন্টে লগইন করুন।");
   };
 

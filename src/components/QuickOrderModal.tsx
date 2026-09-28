@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react";
 import { 
   X, Check, ShoppingCart, Truck, ShieldCheck, MapPin, 
   Phone, User, Banknote, CreditCard, ChevronRight, CheckCircle2, 
-  Sparkles, AlertCircle, Clock, Copy
+  Sparkles, AlertCircle, Clock, Copy, Tag
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../lib/firebase";
 import { collection, addDoc, doc, updateDoc, increment } from "firebase/firestore";
 import { ResolvedProduct, getProductShareUrl } from "../lib/productLink";
 import { useAuth } from "../context/AuthContext";
+import { useVoiceGuidance } from "../context/VoiceGuidanceContext";
 import { sendSms } from "../lib/smsService";
 
 interface QuickOrderModalProps {
@@ -31,6 +32,7 @@ export const QuickOrderModal: React.FC<QuickOrderModalProps> = ({
   onOrderSuccess
 }) => {
   const { user, profile } = useAuth();
+  const { speak } = useVoiceGuidance();
 
   // Selection states
   const [quantity, setQuantity] = useState<number>(initialQuantity);
@@ -43,6 +45,43 @@ export const QuickOrderModal: React.FC<QuickOrderModalProps> = ({
   const [customerAddress, setCustomerAddress] = useState<string>(profile?.address || "");
   const [deliveryZone, setDeliveryZone] = useState<"inside_dhaka" | "outside_dhaka">("inside_dhaka");
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "bkash" | "nagad">("cod");
+
+  // Promo Code States
+  const [promoCodeInput, setPromoCodeInput] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
+  const handleApplyPromo = async () => {
+    setPromoError(null);
+    const code = promoCodeInput.trim().toUpperCase();
+    if (!code) return;
+
+    setIsApplyingPromo(true);
+    try {
+      const { getActivePromoCodes, validatePromoCode } = await import("../lib/promoService");
+      const promoList = await getActivePromoCodes();
+      const validation = validatePromoCode(code, promoList, {
+        subtotal: unitPrice * quantity,
+        product: product,
+        categoryId: product.categoryId
+      });
+
+      if (validation.isValid) {
+        setAppliedPromo(validation.promo);
+        setDiscountAmount(validation.discountAmount);
+      } else {
+        setPromoError(validation.error || "অবৈধ প্রমো কোড");
+        setAppliedPromo(null);
+        setDiscountAmount(0);
+      }
+    } catch (err) {
+      setPromoError("প্রমো কোড যাচাই করা যাচ্ছে না");
+    } finally {
+      setIsApplyingPromo(false);
+    }
+  };
 
   // UI status states
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,6 +115,7 @@ export const QuickOrderModal: React.FC<QuickOrderModalProps> = ({
       
       setErrorMessage(null);
       setCompletedOrder(null);
+      speak("আপনার অর্ডার সম্পন্ন করতে প্রয়োজনীয় তথ্যগুলো প্রদান করুন।", { key: "quick-order-open", mood: "ORDER" });
     }
   }, [isOpen, product, availableSizes]);
 
@@ -85,7 +125,7 @@ export const QuickOrderModal: React.FC<QuickOrderModalProps> = ({
   const unitPrice = Number(product.discountPrice || product.price || 0);
   const subtotal = unitPrice * quantity;
   const deliveryCharge = deliveryZone === "inside_dhaka" ? 60 : 120;
-  const grandTotal = subtotal + deliveryCharge;
+  const grandTotal = Math.max(0, subtotal + deliveryCharge - discountAmount);
 
   // Phone Validation
   const cleanPhone = customerPhone.replace(/\D/g, "");
@@ -141,7 +181,8 @@ export const QuickOrderModal: React.FC<QuickOrderModalProps> = ({
         items: [orderItem],
         subtotal: subtotal,
         deliveryCharge: deliveryCharge,
-        discount: 0,
+        discount: discountAmount,
+        appliedPromoCode: appliedPromo?.code || null,
         total: grandTotal,
         grandTotal: grandTotal,
         codAmount: paymentMethod === "cod" ? grandTotal : 0,
@@ -194,6 +235,7 @@ export const QuickOrderModal: React.FC<QuickOrderModalProps> = ({
         totalAmount: grandTotal,
         phone: cleanPhone
       });
+      speak("অভিনন্দন! আপনার অর্ডার সফলভাবে গ্রহণ করা হয়েছে।", { key: "order-success", priority: "high", force: true, mood: "SUCCESS" });
 
       if (onOrderSuccess) {
         onOrderSuccess(docRef.id, orderNumber);
@@ -525,12 +567,45 @@ export const QuickOrderModal: React.FC<QuickOrderModalProps> = ({
                 </div>
               </div>
 
+              {/* Promo Code Option */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-bold text-gray-500 uppercase flex items-center gap-1.5 ml-1">
+                  <Tag className="w-3 h-3 text-[#ffb703]" />
+                  <span>প্রমো কোড (Promo Code):</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={promoCodeInput}
+                    onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                    placeholder="কোড দিন (যেমন: SAVE10)"
+                    className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#004b23]/30 uppercase"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyPromo}
+                    disabled={isApplyingPromo || !promoCodeInput.trim()}
+                    className="bg-[#004b23] text-white px-4 py-2.5 rounded-xl text-xs font-black active:scale-95 transition-transform disabled:opacity-50"
+                  >
+                    {isApplyingPromo ? "..." : "প্রয়োগ"}
+                  </button>
+                </div>
+                {promoError && <p className="text-[10px] text-rose-500 font-bold ml-1">{promoError}</p>}
+                {appliedPromo && <p className="text-[10px] text-emerald-600 font-black ml-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> {appliedPromo.code} প্রযোজ্য হয়েছে (৳{discountAmount} ছাড়)</p>}
+              </div>
+
               {/* Price Calculation Bill */}
               <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200/80 space-y-1.5 text-xs font-bold">
                 <div className="flex items-center justify-between text-gray-600">
                   <span>পণ্যের মূল্য ({quantity} টি):</span>
                   <span className="text-gray-900">৳{subtotal}</span>
                 </div>
+                {discountAmount > 0 && (
+                  <div className="flex items-center justify-between text-emerald-600">
+                    <span>ছাড় (Discount):</span>
+                    <span>- ৳{discountAmount}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between text-gray-600">
                   <span>ডেলিভারি চার্জ:</span>
                   <span className="text-gray-900">৳{deliveryCharge}</span>

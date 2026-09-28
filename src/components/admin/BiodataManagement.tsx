@@ -18,7 +18,8 @@ import {
   Clock,
   Filter,
   Save,
-  X
+  X,
+  Plus
 } from "lucide-react";
 import { db } from "../../lib/firebase";
 import { 
@@ -28,7 +29,8 @@ import {
   doc, 
   updateDoc, 
   deleteDoc, 
-  getDoc 
+  getDoc,
+  addDoc 
 } from "firebase/firestore";
 import { Biodata, BiodataRequest } from "../../types/matrimonial";
 
@@ -45,6 +47,46 @@ export const BiodataManagement: React.FC = () => {
   // Editing Modal State
   const [editingBiodata, setEditingBiodata] = useState<Biodata | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Add Biodata Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newBiodata, setNewBiodata] = useState({
+    fullName: "",
+    gender: "groom" as "groom" | "bride",
+    maritalStatus: "অবিবাহিত",
+    age: 25,
+    height: "৫ ফুট ৭ ইঞ্চি",
+    weight: "৬৮ কেজি",
+    complexion: "উজ্জ্বল ফর্সা",
+    bloodGroup: "B+",
+    presentDistrict: "ঢাকা",
+    presentUpazila: "",
+    permanentDistrict: "ঢাকা",
+    educationMethod: "সাধারণ শিক্ষা",
+    highestDegree: "স্নাতক / মাস্টার্স",
+    institute: "",
+    occupation: "চাকরিজীবী",
+    monthlyIncome: "৫০,০০০ - ৭০,০০০ টাকা",
+    fatherOccupation: "ব্যবসায়ী",
+    motherOccupation: "গৃহিণী",
+    brothersCount: 1,
+    sistersCount: 1,
+    familyDetails: "দ্বীনি ও মার্জিত মধ্যবিত্ত পরিবার।",
+    familyStatus: "দ্বীনি মধ্যবিত্ত",
+    salahRegularity: "৫ ওয়াক্ত জামাতে",
+    hijabOrBeard: "সুন্নতি দাড়ি ও টাখনুর উপরে কাপড়",
+    quranRecitation: "সহিহভাবে প্রতিদিন তিলাওয়াত করি",
+    mahramNonMahramCompliance: "কঠোরভাবে মেনে চলি",
+    aboutSelf: "সুন্নাহসম্মত জীবনযাপনে অভ্যস্ত ও দ্বীনি সচেতন।",
+    expectedAgeRange: "১৮ - ২২ বছর",
+    expectedHeight: "৫ ফুট ২ ইঞ্চি - ৫ ফুট ৫ ইঞ্চি",
+    expectedEducation: "এইচএসসি / স্নাতক / আলেমা",
+    expectedReligiousQualities: "নিয়মিত সালাত আদায়কারী ও পর্দাশীল পাত্রী।",
+    guardianName: "অভিভাবকের নাম",
+    guardianRelation: "বাবা",
+    guardianPhone: "017XXXXXXXX"
+  });
 
   useEffect(() => {
     setLoading(true);
@@ -160,6 +202,79 @@ export const BiodataManagement: React.FC = () => {
     }
   };
 
+  // Create New Biodata Handler
+  const handleCreateBiodata = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBiodata.fullName.trim()) {
+      alert("প্রার্থীর নাম আবশ্যক!");
+      return;
+    }
+    if (!newBiodata.guardianPhone.trim()) {
+      alert("অভিভাবকের মোবাইল নম্বর আবশ্যক!");
+      return;
+    }
+
+    setIsAdding(true);
+    try {
+      const generatedCode = `MB-${1000 + biodatas.length + 1}`;
+      const toSave = {
+        ...newBiodata,
+        biodataCode: generatedCode,
+        userId: "admin_created_" + Date.now(),
+        status: "active",
+        isVerified: true,
+        isFeatured: false,
+        photoBlurred: true,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+
+      await addDoc(collection(db, "biodatas"), toSave);
+      alert(`বায়োডাটা (${generatedCode}) সফলভাবে তৈরি ও একটিভ করা হয়েছে!`);
+      setIsAddModalOpen(false);
+      setNewBiodata({
+        fullName: "",
+        gender: "groom",
+        maritalStatus: "অবিবাহিত",
+        age: 25,
+        height: "৫ ফুট ৭ ইঞ্চি",
+        weight: "৬৮ কেজি",
+        complexion: "উজ্জ্বল ফর্সা",
+        bloodGroup: "B+",
+        presentDistrict: "ঢাকা",
+        presentUpazila: "",
+        permanentDistrict: "ঢাকা",
+        educationMethod: "সাধারণ শিক্ষা",
+        highestDegree: "স্নাতক / মাস্টার্স",
+        institute: "",
+        occupation: "চাকরিজীবী",
+        monthlyIncome: "৫০,০০০ - ৭০,০০০ টাকা",
+        fatherOccupation: "ব্যবসায়ী",
+        motherOccupation: "গৃহিণী",
+        brothersCount: 1,
+        sistersCount: 1,
+        familyDetails: "দ্বীনি ও মার্জিত মধ্যবিত্ত পরিবার।",
+        familyStatus: "দ্বীনি মধ্যবিত্ত",
+        salahRegularity: "৫ ওয়াক্ত জামাতে",
+        hijabOrBeard: "সুন্নতি দাড়ি ও টাখনুর উপরে কাপড়",
+        quranRecitation: "সহিহভাবে প্রতিদিন তিলাওয়াত করি",
+        mahramNonMahramCompliance: "কঠোরভাবে মেনে চলি",
+        aboutSelf: "সুন্নাহসম্মত জীবনযাপনে অভ্যস্ত ও দ্বীনি সচেতন।",
+        expectedAgeRange: "১৮ - ২২ বছর",
+        expectedHeight: "৫ ফুট ২ ইঞ্চি - ৫ ফুট ৫ ইঞ্চি",
+        expectedEducation: "এইচএসসি / স্নাতক / আলেমা",
+        expectedReligiousQualities: "নিয়মিত সালাত আদায়কারী ও পর্দাশীল পাত্রী।",
+        guardianName: "অভিভাবকের নাম",
+        guardianRelation: "বাবা",
+        guardianPhone: "017XXXXXXXX"
+      });
+    } catch (err: any) {
+      alert("বায়োডাটা তৈরিতে সমস্যা হয়েছে: " + err.message);
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
   // Filtered Biodatas List
   const filteredBiodatas = biodatas.filter((b) => {
     if (statusFilter !== "all" && b.status !== statusFilter) return false;
@@ -235,6 +350,15 @@ export const BiodataManagement: React.FC = () => {
                 <option value="pending">অপেক্ষমাণ (Pending)</option>
                 <option value="inactive">বন্ধ (Inactive)</option>
               </select>
+
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(true)}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-2xl bg-[#ffb703] hover:bg-[#fca311] text-black font-black text-xs flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>নতুন বায়োডাটা যোগ করুন</span>
+              </button>
             </div>
           </div>
 
@@ -493,6 +617,203 @@ export const BiodataManagement: React.FC = () => {
                 <span>{savingEdit ? "সেভ হচ্ছে..." : "পরিবর্তন সেভ করুন"}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Biodata Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-3xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <Heart className="w-5 h-5 text-rose-500 fill-rose-500" />
+                <h3 className="text-base font-black text-gray-900">নতুন পাত্র/পাত্রীর বায়োডাটা যোগ করুন</h3>
+              </div>
+              <button onClick={() => setIsAddModalOpen(false)} className="p-1 text-gray-500 hover:text-gray-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateBiodata} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">প্রার্থীর নাম *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="যেমন: মুহাম্মাদ আবদুল্লাহ"
+                    value={newBiodata.fullName}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, fullName: e.target.value })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">বায়োডাটার ধরন *</label>
+                  <select
+                    value={newBiodata.gender}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, gender: e.target.value as "groom" | "bride" })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  >
+                    <option value="groom">পাত্রের বায়োডাটা (Groom)</option>
+                    <option value="bride">পাত্রীর বায়োডাটা (Bride)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">বৈবাহিক অবস্থা</label>
+                  <select
+                    value={newBiodata.maritalStatus}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, maritalStatus: e.target.value })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  >
+                    <option value="অবিবাহিত">অবিবাহিত</option>
+                    <option value="ডিভোর্সড">ডিভোর্সড</option>
+                    <option value="বিধবা/বিপত্নীক">বিধবা/বিপত্নীক</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">বয়স</label>
+                  <input
+                    type="number"
+                    value={newBiodata.age}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, age: Number(e.target.value) })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">উচ্চতা</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: ৫ ফুট ৭ ইঞ্চি"
+                    value={newBiodata.height}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, height: e.target.value })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">গায়ের রঙ</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: উজ্জ্বল ফর্সা / ফর্সা / শ্যামলা"
+                    value={newBiodata.complexion}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, complexion: e.target.value })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">বর্তমান জেলা</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: ঢাকা"
+                    value={newBiodata.presentDistrict}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, presentDistrict: e.target.value })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">স্থায়ী জেলা</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: চট্টগ্রাম"
+                    value={newBiodata.permanentDistrict}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, permanentDistrict: e.target.value })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">পেশা</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: সরকারি চাকরি / সফটওয়্যার ইঞ্জিনিয়ার / ব্যবসায়ী"
+                    value={newBiodata.occupation}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, occupation: e.target.value })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">সর্বোচ্চ ডিগ্রি / শিক্ষা</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: বিএসসি / দাওরায়ে হাদিস / মাস্টার্স"
+                    value={newBiodata.highestDegree}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, highestDegree: e.target.value })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">অভিভাবকের মোবাইল নম্বর *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="যেমন: 017XXXXXXXX"
+                    value={newBiodata.guardianPhone}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, guardianPhone: e.target.value })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-gray-800 block mb-1">অভিভাবকের সাথে সম্পর্ক</label>
+                  <input
+                    type="text"
+                    placeholder="যেমন: বাবা / মা / ভাই"
+                    value={newBiodata.guardianRelation}
+                    onChange={(e) => setNewBiodata({ ...newBiodata, guardianRelation: e.target.value })}
+                    className="w-full bg-gray-50 border rounded-xl p-2.5 font-bold text-gray-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-800 block mb-1">নিজের সম্পর্কে সংক্ষেপে</label>
+                <textarea
+                  rows={2}
+                  placeholder="প্রার্থীর ব্যক্তিত্ব ও দ্বীনি মনোভাব..."
+                  value={newBiodata.aboutSelf}
+                  onChange={(e) => setNewBiodata({ ...newBiodata, aboutSelf: e.target.value })}
+                  className="w-full bg-gray-50 border rounded-xl p-2.5 font-semibold text-gray-900"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-gray-800 block mb-1">জীবনসঙ্গীর ধর্মীয় ও সাধারণ প্রত্যাশা</label>
+                <textarea
+                  rows={2}
+                  placeholder="যেমন: নিয়মিত সালাত আদায়কারী ও পর্দাশীল পাত্রী..."
+                  value={newBiodata.expectedReligiousQualities}
+                  onChange={(e) => setNewBiodata({ ...newBiodata, expectedReligiousQualities: e.target.value })}
+                  className="w-full bg-gray-50 border rounded-xl p-2.5 font-semibold text-gray-900"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 font-bold rounded-xl text-xs hover:bg-gray-200"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAdding}
+                  className="px-5 py-2 bg-emerald-800 hover:bg-emerald-900 text-white font-black rounded-xl text-xs flex items-center gap-1.5 shadow-md active:scale-95"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{isAdding ? "সেভ হচ্ছে..." : "বায়োডাটা সেভ ও পাবলিশ করুন"}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

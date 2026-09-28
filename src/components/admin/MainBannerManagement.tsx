@@ -9,7 +9,7 @@ import {
   collection, addDoc, getDocs, deleteDoc, 
   doc, updateDoc, query, orderBy, onSnapshot
 } from "firebase/firestore";
-import { compressImage } from "../../lib/imageUtils";
+import { compressImage, compressBannerImage } from "../../lib/imageUtils";
 
 interface MainBanner {
   id: string;
@@ -57,7 +57,7 @@ export const MainBannerManagement: React.FC = () => {
 
     setIsUploading(true);
     try {
-      const base64 = await compressImage(file);
+      const base64 = await compressBannerImage(file);
       setImage(base64);
       showToast("ছবি আপলোড হয়েছে");
     } catch (error) {

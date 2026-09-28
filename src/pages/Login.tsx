@@ -93,10 +93,8 @@ export const Login: React.FC = () => {
       navigate(redirectUrl, { replace: true });
     } catch (err: any) {
       console.warn("Google login error:", err);
-      setErrorInfo({
-        message: "গুগল সাইন-ইন সম্পন্ন করা যায়নি। প্লে কনসোল বা প্রোডাকশন বিল্ডে গুগল সাইন-ইন নির্বিঘ্নে কাজ করার জন্য Firebase Console > Authentication > Sign-in method > Google-এ আপনার প্রজেক্টের SHA-1 সার্টিফিকেট ফিঙ্গারপ্রিন্ট যুক্ত করা আছে কিনা তা নিশ্চিত করুন।",
-        errorType: "general"
-      });
+      const mapped = getBanglaAuthErrorMessage(err, 'login', 'Google Account');
+      setErrorInfo(mapped);
     } finally {
       setLoading(false);
     }

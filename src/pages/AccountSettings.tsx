@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, User, Phone, Mail, Camera, Shield, Bell, Lock, 
   MapPin, Check, ChevronRight, LogOut, Moon, Globe, 
-  Smartphone, Eye, EyeOff, Save, Trash2, KeyRound 
+  Smartphone, Eye, EyeOff, Save, Trash2, KeyRound, Volume2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../context/AuthContext";
+import { useVoiceGuidance } from "../context/VoiceGuidanceContext";
 import { auth, db } from "../lib/firebase";
 import { signOut, updateProfile, updatePassword } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -17,6 +18,7 @@ import { DeleteAccountModal } from "../components/DeleteAccountModal";
 export const AccountSettings: React.FC = () => {
   const navigate = useNavigate();
   const { user, profile, refreshProfile } = useAuth();
+  const { isVoiceEnabled, setVoiceEnabled } = useVoiceGuidance();
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<"profile" | "security" | "notifications" | "preferences">("profile");
@@ -504,6 +506,22 @@ export const AccountSettings: React.FC = () => {
                       setRememberMe(e.target.checked);
                       handleUpdatePreference("rememberMe", e.target.checked);
                     }}
+                    className="w-5 h-5 accent-[#004b23] rounded-lg cursor-pointer"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3.5 bg-emerald-50/50 border border-emerald-100/60 rounded-2xl">
+                  <div>
+                    <h4 className="font-bold text-gray-900 flex items-center gap-1.5">
+                      <Volume2 className="w-4 h-4 text-[#004b23]" />
+                      <span>ভয়েস গাইডেন্স (Voice Guidance)</span>
+                    </h4>
+                    <p className="text-[10px] text-gray-500">অ্যাপের বিভিন্ন সেকশন ও ফর্মে স্বয়ংক্রিয় বাংলা ভয়েস নির্দেশনা</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isVoiceEnabled}
+                    onChange={(e) => setVoiceEnabled(e.target.checked)}
                     className="w-5 h-5 accent-[#004b23] rounded-lg cursor-pointer"
                   />
                 </div>

@@ -687,6 +687,8 @@ export const ProductListing: React.FC = () => {
         price,
         quantity: 1,
         image,
+        categoryId: product.categoryId || normalizedId,
+        categoryName: product.category || category?.nameBn || category?.title || "",
         weight: product.weight || product.unit || "",
         selectedSize: defaultSize
       });

@@ -29,13 +29,22 @@ export const DeepLinkHandler: React.FC = () => {
             const searchParams = new URLSearchParams(pathPart.replace("product?", ""));
             const id = searchParams.get("id") || searchParams.get("productId");
             targetPath = id ? `/product/${id}` : "/";
+          } else if (pathPart.startsWith("surprise/")) {
+            targetPath = `/reminders?surprise=${pathPart.replace("surprise/", "")}`;
+          } else if (pathPart.startsWith("reminders?")) {
+            targetPath = "/" + pathPart;
           } else {
             targetPath = "/" + pathPart;
           }
         } else {
           try {
             const parsed = new URL(cleanUrl);
-            targetPath = parsed.pathname + parsed.search + parsed.hash;
+            const surpriseId = parsed.searchParams.get("surprise");
+            if (surpriseId) {
+              targetPath = `/reminders?surprise=${surpriseId}`;
+            } else {
+              targetPath = parsed.pathname + parsed.search + parsed.hash;
+            }
           } catch (e) {
             targetPath = cleanUrl;
           }

@@ -92,4 +92,11 @@
     <!-- স্টোরেজ ও মিডিয়া পারমিশন (Product / Profile Image Uploads) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+    <!-- Android 11+ (API 30+) Package Visibility Queries for Offline Text-To-Speech (TTS) Engines -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 </manifest>

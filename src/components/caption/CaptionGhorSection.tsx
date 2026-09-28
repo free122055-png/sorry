@@ -28,26 +28,22 @@ export const CaptionGhorSection: React.FC<{ onBack?: () => void }> = ({ onBack }
   useEffect(() => {
     // Real-time listener for categories
     const unsubCats = onSnapshot(collection(db, "caption_categories"), (snapshot) => {
-      if (!snapshot.empty) {
-        const loadedCats = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CaptionCategory));
-        const combined = [...DEFAULT_CAPTION_CATEGORIES];
-        loadedCats.forEach(c => {
-          if (!combined.some(dc => dc.id === c.id || dc.slug === c.slug)) {
-            combined.push(c);
-          }
-        });
-        setCategories(combined.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)));
-      }
+      const loadedCats = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CaptionCategory));
+      const combined = [...DEFAULT_CAPTION_CATEGORIES];
+      loadedCats.forEach(c => {
+        if (!combined.some(dc => dc.id === c.id || dc.slug === c.slug)) {
+          combined.push(c);
+        }
+      });
+      setCategories(combined.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)));
     }, (err) => {
       console.warn("Category listener notice:", err);
     });
 
     // Real-time listener for captions added by admin
     const unsubCaps = onSnapshot(collection(db, "captions"), (snapshot) => {
-      if (!snapshot.empty) {
-        const loadedCaps = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
-        setFirestoreCaptions(loadedCaps);
-      }
+      const loadedCaps = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      setFirestoreCaptions(loadedCaps);
     }, (err) => {
       console.warn("Caption listener notice:", err);
     });

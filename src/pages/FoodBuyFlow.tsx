@@ -14,14 +14,19 @@ import { db } from "../lib/firebase";
 import { collection, addDoc, doc, getDoc, getDocs, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
+import { useVoiceGuidance } from "../context/VoiceGuidanceContext";
 import { User, Compass } from "lucide-react";
 import { ensureMultiImages } from "../lib/imageUtils";
+import { getActivePromoCodes, validatePromoCode } from "../lib/promoService";
 
 interface OrderItem {
   id: string;
+  productId?: string;
   nameBn: string;
   brand: string;
   category?: string;
+  categoryId?: string;
+  categoryName?: string;
   unit: string;
   unitWeightKg: number;
   pricePerUnit: number;
@@ -38,6 +43,7 @@ export const FoodBuyFlow: React.FC = () => {
   const { orderId: paramOrderId } = useParams<{ orderId?: string }>();
   const { items: globalCartItems } = useCart();
   const { requireAuth, user, profile } = useAuth();
+  const { speak } = useVoiceGuidance();
 
   const categoryName = (location.state as any)?.categoryName || "All MAYADIN FASHION";
   const [isFoodCategoryDisabled, setIsFoodCategoryDisabled] = useState(false);
@@ -62,6 +68,25 @@ export const FoodBuyFlow: React.FC = () => {
   // Step 7: Live Order Tracking
   const [currentStep, setCurrentStep] = useState<number>(1);
 
+  // Context-Based Voice Guidance per step
+  useEffect(() => {
+    if (currentStep === 1) {
+      speak("আপনার অর্ডার সম্পন্ন করতে প্রয়োজনীয় তথ্যগুলো প্রদান করুন।", { key: "buyflow-step-1", mood: "ORDER" });
+    } else if (currentStep === 2) {
+      speak("আপনার ডেলিভারি ঠিকানা প্রদান করুন।", { key: "buyflow-step-2", mood: "ADDRESS" });
+    } else if (currentStep === 3) {
+      speak("ডেলিভারি মেথড নির্বাচন করুন।", { key: "buyflow-step-3", mood: "ORDER" });
+    } else if (currentStep === 4) {
+      speak("পেমেন্ট পদ্ধতি বেছে নিন।", { key: "buyflow-step-4", mood: "ORDER" });
+    } else if (currentStep === 5) {
+      speak("আপনার অর্ডার কনফার্ম করার আগে প্রদত্ত তথ্যগুলো যাচাই করুন।", { key: "buyflow-step-5", priority: "high", mood: "ORDER" });
+    } else if (currentStep === 6) {
+      speak("অভিনন্দন! আপনার অর্ডার সফলভাবে গ্রহণ করা হয়েছে।", { key: "buyflow-step-6", priority: "high", force: true, mood: "SUCCESS" });
+    } else if (currentStep === 7) {
+      speak("আপনার অর্ডারের বিবরণ ও লাইভ ট্র্যাকিং স্ট্যাটাস।", { key: "buyflow-step-7", mood: "INFO" });
+    }
+  }, [currentStep, speak]);
+
   // Initialize order items from location state (direct buy on product), global cart, or default basket
   const [orderItems, setOrderItems] = useState<OrderItem[]>(() => {
     const passedProduct = (location.state as any)?.selectedProduct;
@@ -70,6 +95,10 @@ export const FoodBuyFlow: React.FC = () => {
       const imagesList = ensureMultiImages(passedProduct);
       return [{
         id: matched?.id || passedProduct.id || "food-1",
+        productId: passedProduct.id || matched?.id,
+        categoryId: passedProduct.categoryId || matched?.categoryId || (location.state as any)?.categoryId || "cat1",
+        category: passedProduct.category || matched?.category || "খাদ্য বাজার",
+        categoryName: passedProduct.categoryName || matched?.categoryName || (location.state as any)?.categoryName || "খাদ্য বাজার",
         nameBn: matched?.nameBn || passedProduct.nameBn || passedProduct.name || "পণ্য",
         brand: matched?.brand || passedProduct.brand || "তাজা বাজার",
         unit: matched?.unit || passedProduct.unit || "পিস",
@@ -89,6 +118,10 @@ export const FoodBuyFlow: React.FC = () => {
         const imagesList = ensureMultiImages(cItem);
         return {
           id: cItem.productId,
+          productId: cItem.productId,
+          categoryId: cItem.categoryId || (cItem as any).category || matched?.categoryId || "cat1",
+          category: (cItem as any).category || matched?.category || "খাদ্য বাজার",
+          categoryName: (cItem as any).categoryName || matched?.categoryName || "খাদ্য বাজার",
           nameBn: cItem.name,
           brand: matched?.brand || "বাজার",
           unit: matched?.unit || cItem.weight || "পিস",
@@ -319,87 +352,28 @@ export const FoodBuyFlow: React.FC = () => {
     setIsApplyingPromo(true);
 
     try {
-      let promoList: any[] = [];
-      try {
-        const snap = await getDocs(collection(db, "promo_codes"));
-        snap.forEach(docSnap => {
-          promoList.push({ id: docSnap.id, ...docSnap.data() });
-        });
-      } catch (e) {
-        console.warn("Could not fetch promo_codes from Firestore:", e);
-      }
+      const promoList = await getActivePromoCodes();
+      const passedProduct = (location.state as any)?.selectedProduct;
+      const passedCatId = (location.state as any)?.categoryId || passedProduct?.categoryId || "";
+      const passedCatName = categoryName || (location.state as any)?.categoryName || passedProduct?.categoryName || "";
 
-      if (promoList.length === 0) {
-        const local = localStorage.getItem("admin_promo_codes");
-        if (local) {
-          try { promoList = JSON.parse(local); } catch(e) {}
-        }
-      }
+      const validation = validatePromoCode(code, promoList, {
+        subtotal: totalItemPrice,
+        items: orderItems,
+        categoryId: passedCatId,
+        categoryName: passedCatName,
+        product: passedProduct
+      });
 
-      const found = promoList.find((p: any) => p.code === code && p.status === 'active');
-
-      if (!found) {
-        if (code === "MAYADIN" || code === "SAVE10" || code === "WELCOME") {
-          const calcDiscount = Math.round(totalItemPrice * 0.1);
-          const finalDiscount = calcDiscount > 0 ? calcDiscount : 50;
-          setAppliedPromo({
-            code,
-            discountType: "percentage",
-            discountValue: 10,
-            categoryId: "all"
-          });
-          setDiscountAmount(finalDiscount);
-          setPromoSuccess(`🎉 অভিনন্দন! ১০% (৳${finalDiscount}) ছাড় যুক্ত হয়েছে!`);
-          setIsApplyingPromo(false);
-          return;
-        }
-
-        setPromoError("অবৈধ বা মেয়াদোত্তীর্ণ প্রমো কোড!");
+      if (!validation.isValid) {
+        setPromoError(validation.error || "অবৈধ বা মেয়াদোত্তীর্ণ প্রমো কোড!");
         setIsApplyingPromo(false);
         return;
       }
 
-      // Check Category Matching
-      const currentCatId = (location.state as any)?.categoryId || (location.state as any)?.category || "";
-      const currentCatName = categoryName || "";
-
-      const isCategoryMatch = 
-        found.categoryId === "all" ||
-        found.categoryId === currentCatId ||
-        (found.categoryName && currentCatName && currentCatName.toLowerCase().includes(found.categoryName.toLowerCase())) ||
-        (found.categoryId === "cat2" && (currentCatName.includes("অয়েল") || currentCatName.includes("Oil"))) ||
-        (found.categoryId === "cat3" && (currentCatName.includes("কাপড়") || currentCatName.includes("পরিধান") || currentCatName.includes("Fashion"))) ||
-        (found.categoryId === "cat4" && (currentCatName.includes("উপহার") || currentCatName.includes("Gift"))) ||
-        (found.categoryId === "cat6" && (currentCatName.includes("ইসলামিক") || currentCatName.includes("Islamic")));
-
-      if (!isCategoryMatch) {
-        setPromoError(`এই প্রমো কোডটি শুধুমাত্র "${found.categoryName || 'নির্দিষ্ট'}" ক্যাটাগরির জন্য প্রযোজ্য!`);
-        setIsApplyingPromo(false);
-        return;
-      }
-
-      // Check Minimum Order Amount
-      if (found.minOrderAmount && totalItemPrice < Number(found.minOrderAmount)) {
-        setPromoError(`এই কোডটি ব্যবহারের জন্য সর্বনিম্ন অর্ডার মূল্য ৳${found.minOrderAmount} হতে হবে!`);
-        setIsApplyingPromo(false);
-        return;
-      }
-
-      // Calculate discount
-      let calcDiscount = 0;
-      if (found.discountType === "percentage") {
-        calcDiscount = Math.round((totalItemPrice * Number(found.discountValue)) / 100);
-      } else {
-        calcDiscount = Number(found.discountValue);
-      }
-
-      if (calcDiscount > totalItemPrice) {
-        calcDiscount = totalItemPrice;
-      }
-
-      setAppliedPromo(found);
-      setDiscountAmount(calcDiscount);
-      setPromoSuccess(`🎉 প্রমো কোড "${found.code}" সফলভাবে প্রযোজ্য হয়েছে! ৳${calcDiscount} ছাড় পেয়েছেন।`);
+      setAppliedPromo(validation.promo);
+      setDiscountAmount(validation.discountAmount);
+      setPromoSuccess(`🎉 প্রমো কোড "${validation.promo?.code}" সফলভাবে প্রযোজ্য হয়েছে! ${validation.discountText} পেয়েছেন।`);
     } catch (err: any) {
       console.error("Error applying promo:", err);
       setPromoError("প্রমো কোড যাচাই করতে সমস্যা হয়েছে, আবার চেষ্টা করুন।");

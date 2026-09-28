@@ -160,8 +160,8 @@ export function DownloadCertificatePage() {
                 /api/download-keystore
               </a>
               <span>•</span>
-              <a href="/download-keystore.html" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline hover:text-amber-300">
-                অটো ডাউনলোড পেজ ↗
+              <a href="/release.keystore" download="release.keystore" className="text-amber-400 underline hover:text-amber-300">
+                /release.keystore
               </a>
             </div>
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 text-[11px] text-amber-200/90 leading-relaxed">

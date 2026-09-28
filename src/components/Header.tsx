@@ -39,10 +39,10 @@ export const Header: React.FC = () => {
 
   return (
     <>
-      <header className={`sticky top-0 z-50 bg-[#052b1b] text-white shadow-md transition-all duration-300 ${!isHome ? 'py-2' : ''}`}>
-        <div className="px-4 pt-3 pb-3 max-w-7xl mx-auto">
+      <header className={`fixed top-0 left-0 right-0 z-50 bg-[#052b1b] text-white shadow-md transition-all duration-300 py-3`}>
+        <div className="px-4 max-w-7xl mx-auto">
           {/* Top Row: Menu - Brand Logo - Notifications */}
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between">
             {/* Hamburger Button */}
             <button 
               onClick={() => setIsMenuOpen(true)}
@@ -70,19 +70,6 @@ export const Header: React.FC = () => {
                 </span>
               )}
             </button>
-          </div>
-
-          {/* Search Bar */}
-          <div className="relative flex items-center">
-            <AnimatedSearchInput
-              value={searchTerm}
-              onChange={handleSearchChange}
-              onSubmit={handleSearchSubmit}
-              category="general"
-              onClear={() => setSearchTerm("")}
-              showClearButton={false}
-              inputClassName={`rounded-full pl-11 pr-4 text-sm font-medium shadow-md ${!isHome ? 'py-2.5' : 'py-3'}`}
-            />
           </div>
         </div>
       </header>

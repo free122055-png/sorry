@@ -23,6 +23,7 @@ import { Account } from "./pages/Account";
 import { Login } from "./pages/Login";
 import { ProductListing } from "./pages/ProductListing";
 import { IslamicTilawat } from "./pages/IslamicTilawat";
+import { Reminders } from "./pages/Reminders";
 
 // Robust dynamic import wrapper with automatic retry and reload recovery on dev server restart
 function safeLazy<T extends React.ComponentType<any>>(
@@ -228,6 +229,7 @@ function AppLayout() {
 
             <Route path="/telecom" element={<TelecomPage />} />
             <Route path="/telecom-service" element={<TelecomPage />} />
+            <Route path="/reminders" element={<Reminders />} />
             
             <Route path="/security" element={<Legal />} />
             

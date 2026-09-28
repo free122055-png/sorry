@@ -1,84 +1,163 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Plus, ShoppingBag, ChevronRight,
   Sparkles, Gift, BookOpen, Music,
-  Shirt, Moon, Layers, Heart, Wifi
+  Shirt, Moon, Layers, Heart, Wifi, Bell, ShieldAlert, Droplet, Package, Headphones, PenTool, Palette, Users, Smartphone, Clock, Book,
+  Utensils, Brush, BookOpenText, FileText, Router, CalendarCheck, Coffee, ShoppingBasket, BookCopy, Camera, HeartPulse, ReceiptText
 } from "lucide-react";
 import { motion } from "motion/react";
 import { SEO } from "../components/SEO";
 import { StorefrontFacade } from "../components/StorefrontFacade";
+import { DynamicBannerSlider } from "../components/DynamicBannerSlider";
+import { AnimatedSearchInput } from "../components/AnimatedSearchInput";
+import { useAuth } from "../context/AuthContext";
 import { db } from "../lib/firebase";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
-
-const DEFAULT_BANNERS = [
-  "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&q=80",
-  "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=800&q=80",
-  "https://images.unsplash.com/photo-1470309864661-68328b2cd0a5?w=800&q=80"
-];
+import { doc, getDoc } from "firebase/firestore";
 
 const MARKET_CATEGORIES = [
   {
     id: "cat2",
     name: "অয়েল কর্নার",
-    count: "৫০+",
-    icon: <Sparkles className="w-5 h-5 text-white" />,
+    icon: <Droplet className="w-5 h-5 text-white" />,
     iconBg: "bg-amber-600",
-    image: "https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=300&q=80"
   },
   {
     id: "cat3",
     name: "কাপড় ও পরিধান",
-    count: "3200+",
     icon: <Shirt className="w-5 h-5 text-white" />,
     iconBg: "bg-[#0ea5e9]",
-    image: "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=300&q=80"
   },
   {
     id: "cat4",
     name: "উপহার বাজার",
-    count: "650+",
-    icon: <Gift className="w-5 h-5 text-white" />,
+    icon: <ShoppingBasket className="w-5 h-5 text-white" />,
     iconBg: "bg-[#f97316]",
-    image: "https://images.unsplash.com/photo-1549465220-1a8b9238cd48?w=300&q=80"
   },
   {
     id: "cat6",
     name: "ইসলামিক বাজার",
-    count: "780+",
-    icon: <Moon className="w-5 h-5 text-white" />,
+    icon: <Book className="w-5 h-5 text-white" />,
     iconBg: "bg-[#059669]",
-    image: "https://images.unsplash.com/photo-1609599006353-e629aaabfeae?w=300&q=80"
   }
 ];
 
+interface FeatureCardItem {
+  id: string;
+  name: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  path: string;
+}
+
+const FEATURE_SERVICES: FeatureCardItem[] = [
+  {
+    id: "tilawat",
+    name: "তেলাওয়াত",
+    icon: <BookOpenText className="w-5 h-5 text-white" />,
+    iconBg: "bg-[#0a3d2e]",
+    path: "/islamic-tilawat"
+  },
+  {
+    id: "caption",
+    name: "ক্যাপশন",
+    icon: <FileText className="w-5 h-5 text-white" />,
+    iconBg: "bg-pink-600",
+    path: "/caption-ghor"
+  },
+  {
+    id: "editing",
+    name: "এডিটিং",
+    icon: <Camera className="w-5 h-5 text-white" />,
+    iconBg: "bg-slate-800",
+    path: "/pixel-editing-tools"
+  },
+  {
+    id: "matrimonial",
+    name: "বায়োডাটা",
+    icon: <HeartPulse className="w-5 h-5 text-white" />,
+    iconBg: "bg-rose-700",
+    path: "/matrimonial"
+  },
+  {
+    id: "telecom",
+    name: "প্যাক ক্রয়",
+    icon: <Router className="w-5 h-5 text-white" />,
+    iconBg: "bg-[#044a2f]",
+    path: "/telecom"
+  },
+  {
+    id: "reminder",
+    name: "রিমাইন্ডার",
+    icon: <ReceiptText className="w-5 h-5 text-white" />,
+    iconBg: "bg-blue-600",
+    path: "/reminders"
+  }
+];
+
+// Define a mapping for frame colors based on category ID or type
+const getFrameColor = (iconBg: string) => {
+  if (iconBg.includes("amber")) return "border-amber-500";
+  if (iconBg.includes("sky") || iconBg.includes("blue")) return "border-blue-500";
+  if (iconBg.includes("orange")) return "border-orange-500";
+  if (iconBg.includes("green")) return "border-emerald-500";
+  if (iconBg.includes("pink")) return "border-pink-500";
+  if (iconBg.includes("slate")) return "border-slate-500";
+  if (iconBg.includes("rose")) return "border-rose-500";
+  return "border-gray-300";
+};
+
 export const Home: React.FC = () => {
   const navigate = useNavigate();
-  const [activeBanner, setActiveBanner] = React.useState(0);
-  const [banners, setBanners] = React.useState<string[]>(DEFAULT_BANNERS);
+  const { profile } = useAuth();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [customIcons, setCustomIcons] = useState<Record<string, string>>({});
 
-  React.useEffect(() => {
-    const q = query(collection(db, "main_banners"), orderBy("order", "asc"));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data().image).filter(Boolean);
-      if (data.length > 0) {
-        setBanners(data);
-      } else {
-        setBanners(DEFAULT_BANNERS);
+  useEffect(() => {
+    const fetchIcons = async () => {
+      // 1. Try to load from localStorage first
+      const cachedIcons = localStorage.getItem('custom_icons');
+      if (cachedIcons) {
+        setCustomIcons(JSON.parse(cachedIcons));
       }
-    }, (error) => {
-      console.warn("Main banner fetch notice:", error);
-    });
-    return () => unsub();
+
+      // 2. Fetch from Firestore in background
+      const icons: Record<string, string> = {};
+      const allItems = [...MARKET_CATEGORIES, ...FEATURE_SERVICES];
+      for (const cat of allItems) {
+        const docSnap = await getDoc(doc(db, 'configs_icons', cat.id));
+        if (docSnap.exists() && docSnap.data().url) {
+          icons[cat.id] = docSnap.data().url;
+        }
+      }
+      
+      // 3. Update state and localStorage if icons changed
+      setCustomIcons(icons);
+      localStorage.setItem('custom_icons', JSON.stringify(icons));
+    };
+    fetchIcons();
   }, []);
 
-  React.useEffect(() => {
-    if (banners.length === 0) return;
-    const timer = setInterval(() => {
-      setActiveBanner(prev => (prev + 1) % banners.length);
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [banners.length]);
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearchTerm(val);
+    if (val === "122055") {
+      localStorage.setItem("admin_secret_unlocked", "true");
+      navigate("/admin");
+    }
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchTerm === "122055") {
+      localStorage.setItem("admin_secret_unlocked", "true");
+      navigate("/admin");
+      return;
+    }
+    if (searchTerm.trim()) {
+      navigate(`/categories?search=${encodeURIComponent(searchTerm.trim())}`);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#f1f3f4] text-black flex flex-col font-sans select-none pb-20">
@@ -87,215 +166,90 @@ export const Home: React.FC = () => {
         description="Shop premium fashion, groceries and create professional designs with All Mayadin Fashion." 
       />
 
-      <main className="flex-1 overflow-y-auto w-full">
+      <main className="flex-1 overflow-y-auto w-full pt-20">
         {/* 1. Storefront Facade */}
         <StorefrontFacade />
 
-        {/* 2. Banner Slider */}
-        <div className="px-4 mt-4">
-          <div className="relative aspect-[21/9] rounded-2xl overflow-hidden shadow-sm group">
-            {banners.map((banner, idx) => (
-              <motion.img
-                key={idx}
-                src={banner}
-                alt={`Banner ${idx + 1}`}
-                className="absolute inset-0 w-full h-full object-cover"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: activeBanner === idx ? 1 : 0 }}
-                transition={{ duration: 0.8 }}
-              />
-            ))}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-            
-            {/* Dots */}
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-              {banners.map((_, idx) => (
-                <div 
-                  key={idx}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${activeBanner === idx ? "w-6 bg-[#ffb703]" : "w-1.5 bg-white/50"}`}
-                />
-              ))}
-            </div>
-          </div>
+        {/* 2. Overlapping Search Bar exactly matching the screenshot layout */}
+        <div className="relative px-6 sm:px-10 -mt-6 sm:-mt-8 mb-6 z-30 max-w-xl mx-auto">
+          <AnimatedSearchInput
+            value={searchTerm}
+            onChange={handleSearchChange}
+            onSubmit={handleSearchSubmit}
+            category="general"
+            onClear={() => setSearchTerm("")}
+            showClearButton={false}
+            inputClassName="rounded-full pl-11 pr-4 py-4 text-sm font-black shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-gray-200 bg-white text-gray-800 placeholder-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-100"
+          />
         </div>
+
+        {/* 3. Admin Managed Banner Slider */}
+        <DynamicBannerSlider />
 
         <div className="px-4 py-6">
           {/* Section: Main Markets */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-6">
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-4">
               <div className="relative">
                 <h3 className="text-[19px] font-black text-[#0f172a] tracking-tight">আমাদের প্রধান বাজার সমূহ</h3>
                 <div className="absolute -bottom-2 left-0 w-10 h-1 bg-[#10b981] rounded-full" />
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            {/* Market Categories (4 items) - Circular Premium Style */}
+            <div className="grid grid-cols-4 gap-3 sm:gap-4 px-1 sm:px-2">
+
               {MARKET_CATEGORIES.map((cat) => (
                 <motion.div
                   key={cat.id}
-                  whileTap={{ scale: 0.98 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={() => navigate(`/category/${cat.id}`)}
-                  className="bg-white rounded-[16px] p-1.5 shadow-[0_2px_12px_rgba(0,0,0,0.04)] border border-gray-100 flex flex-col gap-2 relative group"
+                  className="flex flex-col items-center gap-1.5 cursor-pointer group"
                 >
-                  <div className="aspect-[4/5] rounded-[12px] overflow-hidden relative">
-                    <img src={cat.image} alt={cat.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                    <div className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-7 h-7 ${cat.iconBg} rounded-full flex items-center justify-center shadow-md border-2 border-white z-10`}>
-                      {React.cloneElement(cat.icon as React.ReactElement, { className: "w-3.5 h-3.5 text-white" })}
-                    </div>
+                  <div className={`w-[84px] h-[86px] sm:w-[90px] sm:h-[92px] rounded-2xl bg-white border ${getFrameColor(cat.iconBg)} flex flex-col items-center justify-center p-1.5 transition-all shadow-xs`}>
+                      <div className={`w-[48px] h-[48px] rounded-full ${cat.iconBg} flex items-center justify-center mb-1 overflow-hidden shadow-xs`}>
+                        {customIcons[cat.id] ? (
+                          <img src={customIcons[cat.id]} alt={cat.name} className="w-full h-full object-cover" />
+                        ) : (
+                          React.cloneElement(cat.icon as React.ReactElement, { className: "w-6 h-6 text-white" })
+                        )}
+                      </div>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-gray-800 text-center leading-tight truncate w-full">{cat.name}</span>
                   </div>
-                  <div className="px-0.5 pt-1.5 pb-0.5 text-center">
-                    <h4 className="text-[9px] font-black text-gray-900 leading-tight mb-0.5 line-clamp-2 h-5 flex items-center justify-center">{cat.name}</h4>
-                    <p className="text-[7px] font-bold text-gray-400">{cat.count} পণ্য</p>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Section: Feature Services - Circular Premium Style */}
+            <div className="mt-8 mb-4">
+              <div className="relative">
+                <h3 className="text-[19px] font-black text-[#0f172a] tracking-tight">অন্যান্য সেবা</h3>
+                <div className="absolute -bottom-2 left-0 w-10 h-1 bg-blue-600 rounded-full" />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-4 gap-x-2 sm:gap-x-3 gap-y-5 px-1">
+              {FEATURE_SERVICES.map((item) => (
+                <motion.div
+                  key={item.id}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => navigate(item.path)}
+                  className="flex flex-col items-center gap-1.5 cursor-pointer group"
+                >
+                  <div className={`w-[84px] h-[86px] sm:w-[90px] sm:h-[92px] rounded-2xl bg-white border ${getFrameColor(item.iconBg)} flex flex-col items-center justify-center p-1.5 transition-all shadow-xs`}>
+                      <div className={`w-[48px] h-[48px] rounded-full ${item.iconBg} flex items-center justify-center mb-1 overflow-hidden shadow-xs`}>
+                        {customIcons[item.id] ? (
+                          <img src={customIcons[item.id]} alt={item.name} className="w-full h-full object-cover" />
+                        ) : (
+                          React.cloneElement(item.icon as React.ReactElement, { className: "w-6 h-6 text-white" })
+                        )}
+                      </div>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-gray-800 text-center leading-tight truncate w-full">{item.name}</span>
                   </div>
                 </motion.div>
               ))}
             </div>
           </div>
-
-          {/* Featured: Islamic Library (Compact & Slim for Mobile) */}
-          <motion.div 
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/islamic-tilawat')}
-            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br from-[#0a3d2e] to-[#052b1b] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md mb-2 sm:mb-2.5 group cursor-pointer"
-          >
-            <div className="relative z-10 flex items-center justify-between gap-2.5">
-              <div className="flex-1 min-w-0">
-                <div className="bg-[#ffcc00] text-black text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight inline-block mb-1">
-                  নতুন সংযোজন
-                </div>
-                <h2 className="text-[13px] sm:text-[15px] font-bold mb-0.5 truncate leading-tight">
-                  ইসলামিক তেলাওয়াত লাইব্রেরি
-                </h2>
-                <p className="text-[10px] sm:text-[11px] text-white/80 truncate leading-normal">
-                  বিশ্বের সেরা ক্বারিদের কন্ঠে ১১৪ সূরার অডিও ও ডাউনলোড
-                </p>
-              </div>
-              
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/95 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
-                <ChevronRight className="w-3.5 h-3.5 text-[#0a3d2e] stroke-[1.5]" />
-              </div>
-            </div>
-            
-            {/* Background elements */}
-            <div className="absolute top-1/2 -translate-y-1/2 -right-2 opacity-[0.08] pointer-events-none">
-              <BookOpen className="w-16 h-16 sm:w-20 sm:h-20 stroke-[1]" />
-            </div>
-          </motion.div>
-
-          {/* Featured: Caption Ghor (Caption Library) */}
-          <motion.div 
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/caption-ghor')}
-            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-r from-[#1b263b] via-[#415a77] to-[#1b263b] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md mb-2 sm:mb-2.5 group cursor-pointer"
-          >
-            <div className="relative z-10 flex items-center justify-between gap-2.5">
-              <div className="flex-1 min-w-0">
-                <div className="bg-pink-500 text-white text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight inline-block mb-1">
-                  নতুন সংযোজন
-                </div>
-                <h2 className="text-[13px] sm:text-[15px] font-bold mb-0.5 truncate leading-tight">
-                  ❝ ক্যাপশন ঘর (Caption Library)
-                </h2>
-                <p className="text-[10px] sm:text-[11px] text-white/80 truncate leading-normal">
-                  ভালোবাসা, কষ্ট, ইসলামিক, অ্যাটিটিউডসহ সব ধরনের ক্যাপশন ও স্ট্যাটাস
-                </p>
-              </div>
-              
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/95 flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform flex-shrink-0 text-[#1b263b]">
-                <ChevronRight className="w-3.5 h-3.5 stroke-[1.5]" />
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Creative Studio Banner (Compact & Slim for Mobile) */}
-          <motion.div 
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/pixel-editing-tools')}
-            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-br from-[#1a1a1a] to-[#0a0a0a] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md mb-2 sm:mb-2.5 group cursor-pointer"
-          >
-            <div className="relative z-10 flex items-center justify-between gap-2.5">
-              <div className="flex-1 min-w-0">
-                <div className="bg-[#00f28e] text-black text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight inline-block mb-1">
-                  ক্রিয়েটিভ টুলস
-                </div>
-                <h2 className="text-[13px] sm:text-[15px] font-bold mb-0.5 truncate leading-tight">
-                  Pixel Editing Tools
-                </h2>
-                <p className="text-[10px] sm:text-[11px] text-white/70 truncate leading-normal">
-                  আপনার ছবিকে দিন প্রফেশনাল লুক, ফিল্টার ও এডিটিং ফ্রিতে
-                </p>
-              </div>
-              
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 border border-white/15 flex items-center justify-center backdrop-blur-md shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
-                <ChevronRight className="w-3.5 h-3.5 text-white stroke-[1.5]" />
-              </div>
-            </div>
-            
-            {/* Background elements */}
-            <div className="absolute top-1/2 -translate-y-1/2 -right-2 opacity-[0.08] pointer-events-none">
-              <Layers className="w-16 h-16 sm:w-20 sm:h-20 stroke-[1]" />
-            </div>
-          </motion.div>
-
-          {/* Matrimonial & Biodata Banner (Islamic Matrimonial) */}
-          <motion.div 
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/matrimonial')}
-            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-r from-[#881337] via-[#9f1239] to-[#701a75] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md group cursor-pointer"
-          >
-            <div className="relative z-10 flex items-center justify-between gap-2.5">
-              <div className="flex-1 min-w-0">
-                <div className="bg-rose-200 text-rose-950 text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tight inline-block mb-1">
-                  ইসলামী সেবা
-                </div>
-                <h2 className="text-[13px] sm:text-[15px] font-bold mb-0.5 truncate leading-tight flex items-center gap-1.5">
-                  <span>💍 বিবাহের বায়োডাটা (Islamic Matrimonial)</span>
-                </h2>
-                <p className="text-[10px] sm:text-[11px] text-rose-100 truncate leading-normal">
-                  শারীয়াহ সম্মত ও সম্পূর্ণ প্রাইভেসি বজায় রেখে দ্বীনি পাত্র/পাত্রীর খোঁজ
-                </p>
-              </div>
-              
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/15 border border-white/20 flex items-center justify-center backdrop-blur-md shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
-                <ChevronRight className="w-3.5 h-3.5 text-white stroke-[1.5]" />
-              </div>
-            </div>
-            
-            {/* Background elements */}
-            <div className="absolute top-1/2 -translate-y-1/2 -right-2 opacity-[0.12] pointer-events-none text-rose-200">
-              <Heart className="w-16 h-16 sm:w-20 sm:h-20 stroke-[1] fill-rose-200" />
-            </div>
-          </motion.div>
-
-          {/* Telecom Service Banner */}
-          <motion.div 
-            whileTap={{ scale: 0.98 }}
-            onClick={() => navigate('/telecom')}
-            className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-gradient-to-r from-[#002A1A] via-[#044a2f] to-[#012014] py-2.5 px-3.5 sm:py-3.5 sm:px-5 text-white shadow-md mt-2.5 group cursor-pointer"
-          >
-            <div className="relative z-10 flex items-center justify-between gap-2.5">
-              <div className="flex-1 min-w-0">
-                <div className="bg-[#ffb703] text-black text-[8px] sm:text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tight inline-block mb-1">
-                  টেলিকম অফার
-                </div>
-                <h2 className="text-[13px] sm:text-[15px] font-bold mb-0.5 truncate leading-tight flex items-center gap-1.5">
-                  <span>📶 ইন্টারনেট প্যাক ক্রয় করুন (Telecom Service)</span>
-                </h2>
-                <p className="text-[10px] sm:text-[11px] text-emerald-100 truncate leading-normal">
-                  জিপি, রবি, বাংলালিংক ও টেলিটক অফার কিনুন সহজে ও নিরাপদে
-                </p>
-              </div>
-              
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/15 border border-white/20 flex items-center justify-center backdrop-blur-md shadow-sm group-hover:scale-105 transition-transform flex-shrink-0">
-                <ChevronRight className="w-3.5 h-3.5 text-white stroke-[1.5]" />
-              </div>
-            </div>
-            
-            {/* Background elements */}
-            <div className="absolute top-1/2 -translate-y-1/2 -right-2 opacity-[0.12] pointer-events-none text-emerald-200">
-              <Wifi className="w-16 h-16 sm:w-20 sm:h-20 stroke-[1]" />
-            </div>
-          </motion.div>
         </div>
       </main>
     </div>

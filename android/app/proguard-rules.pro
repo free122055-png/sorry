@@ -12,6 +12,13 @@
 #   public *;
 #}
 
+# Keep JavaScript Interface annotations and methods for Play Console Release AAB
+-keepattributes JavascriptInterface
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keep class com.dailyinternetoffer.bd.AndroidNativeVoiceBridge { *; }
+
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
 #-keepattributes SourceFile,LineNumberTable

@@ -16,10 +16,13 @@ export const DEFAULT_CATEGORIES: CategoryItem[] = [
   { id: "cat6", nameBn: "ইসলামিক বাজার", nameEn: "Islamic Market", order: 6 }
 ];
 
-const ALLOWED_CATEGORY_IDS = ["cat2", "cat3", "cat4", "cat6"];
+const ALLOWED_CATEGORY_IDS = ["cat1", "cat2", "cat3", "cat4", "cat6"];
 
 export function useFirestoreCategories() {
-  const [categories, setCategories] = useState<CategoryItem[]>(DEFAULT_CATEGORIES);
+  const [categories, setCategories] = useState<CategoryItem[]>([
+    { id: "cat1", nameBn: "খাদ্য বাজার", nameEn: "Food Market", order: 1 },
+    ...DEFAULT_CATEGORIES
+  ]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

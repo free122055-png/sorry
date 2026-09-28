@@ -414,7 +414,7 @@ export const FloatingOrderBubble: React.FC = () => {
         exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
         className="fixed z-[999] touch-none select-none cursor-grab active:cursor-grabbing"
         style={{
-          bottom: "95px",
+          bottom: "115px",
           right: "18px"
         }}
       >
