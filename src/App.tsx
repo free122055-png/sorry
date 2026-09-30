@@ -15,15 +15,25 @@ import { FloatingOrderBubble } from "./components/FloatingOrderBubble";
 import { NotificationProvider } from "./context/NotificationContext";
 import { QuranProvider } from "./context/QuranContext";
 
-// Primary navigation pages imported directly for 0ms instant transitions
+// Primary navigation & core feature pages imported directly for 0ms instant transitions
 import { Home } from "./pages/Home";
 import { Categories } from "./pages/Categories";
 import { Cart } from "./pages/Cart";
 import { Account } from "./pages/Account";
 import { Login } from "./pages/Login";
 import { ProductListing } from "./pages/ProductListing";
+import { ProductDetails } from "./pages/ProductDetails";
+import { Checkout } from "./pages/Checkout";
 import { IslamicTilawat } from "./pages/IslamicTilawat";
 import { Reminders } from "./pages/Reminders";
+import { Orders } from "./pages/Orders";
+import { Wishlist } from "./pages/Wishlist";
+import { PixelEditingTools } from "./pages/PixelEditingTools";
+import { CaptionGhorPage } from "./pages/CaptionGhorPage";
+import { GovServices } from "./pages/GovServices";
+import { GovCategoryDetails } from "./pages/GovCategoryDetails";
+import { MatrimonialPage } from "./pages/MatrimonialPage";
+import { TelecomPage } from "./pages/TelecomPage";
 
 // Robust dynamic import wrapper with automatic retry and reload recovery on dev server restart
 function safeLazy<T extends React.ComponentType<any>>(
@@ -55,12 +65,8 @@ function safeLazy<T extends React.ComponentType<any>>(
 }
 
 // Lazy loading secondary & admin pages with safeLazy wrapper
-const ProductDetails = safeLazy(() => import("./pages/ProductDetails"), "ProductDetails");
-const Checkout = safeLazy(() => import("./pages/Checkout"), "Checkout");
 const Register = safeLazy(() => import("./pages/Register"), "Register");
-const Orders = safeLazy(() => import("./pages/Orders"), "Orders");
 const OrderDetails = safeLazy(() => import("./pages/OrderDetails"), "OrderDetails");
-const Wishlist = safeLazy(() => import("./pages/Wishlist"), "Wishlist");
 const Notifications = safeLazy(() => import("./pages/Notifications"), "Notifications");
 const Addresses = safeLazy(() => import("./pages/Addresses"), "Addresses");
 const Admin = safeLazy(() => import("./pages/Admin"), "Admin");
@@ -74,16 +80,20 @@ const HelpCenter = safeLazy(() => import("./pages/HelpCenter"), "HelpCenter");
 const Contact = safeLazy(() => import("./pages/Contact"), "Contact");
 const AccountSettings = safeLazy(() => import("./pages/AccountSettings"), "AccountSettings");
 const DownloadCert = safeLazy(() => import("./pages/DownloadCert"));
-const PixelEditingTools = safeLazy(() => import("./pages/PixelEditingTools"), "PixelEditingTools");
-const CaptionGhorPage = safeLazy(() => import("./pages/CaptionGhorPage"), "CaptionGhorPage");
-const MatrimonialPage = safeLazy(() => import("./pages/MatrimonialPage"), "MatrimonialPage");
-const TelecomPage = safeLazy(() => import("./pages/TelecomPage"), "TelecomPage");
+const LiveLocationSharing = safeLazy(() => import("./components/LiveLocationSharing"), "LiveLocationSharing");
+const GovAdmin = safeLazy(() => import("./components/admin/GovAdmin"), "GovAdmin");
 const StandaloneAdmin = safeLazy(() => import("./pages/StandaloneAdmin"), "StandaloneAdmin");
 
 const LoadingFallback = () => (
-  <div className="min-h-[40vh] flex flex-col items-center justify-center p-4">
-    <div className="w-8 h-8 border-3 border-[#005a36]/20 border-t-[#005a36] rounded-full animate-spin"></div>
-    <span className="text-xs font-bold text-gray-500 mt-2">লোড হচ্ছে...</span>
+  <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 text-center">
+    <div className="relative w-12 h-12 flex items-center justify-center mb-3">
+      <div className="absolute inset-0 border-3 border-emerald-500/20 border-t-emerald-600 rounded-full animate-spin"></div>
+      <div className="w-5 h-5 rounded-full bg-[#004b23] flex items-center justify-center text-[#ffcc00] font-black text-[10px]">
+        🌙
+      </div>
+    </div>
+    <span className="text-xs font-black text-gray-700 tracking-wide">AL MAYADIN BAZAR</span>
+    <span className="text-[10px] font-semibold text-emerald-600 mt-0.5 animate-pulse">অনুগ্ৰহ করে অপেক্ষা করুন...</span>
   </div>
 );
 
@@ -243,6 +253,9 @@ function AppLayout() {
             <Route path="/search" element={<Categories />} />
             <Route path="/islamic-tilawat" element={<IslamicTilawat />} />
             <Route path="/tilawat" element={<IslamicTilawat />} />
+            <Route path="/gov-services" element={<GovServices />} />
+            <Route path="/gov-services/category/:categoryId" element={<GovCategoryDetails />} />
+            <Route path="/live-location" element={<ProtectedRoute><LiveLocationSharing /></ProtectedRoute>} />
             <Route path="/caption-ghor" element={<CaptionGhorPage />} />
             <Route path="/banner-offer/:bannerId" element={<BannerOfferPage />} />
             <Route path="/offer/:bannerId" element={<BannerOfferPage />} />

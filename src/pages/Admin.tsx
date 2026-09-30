@@ -4,7 +4,7 @@ import {
   ArrowLeft, Menu, Save, Upload, X, Plus, Tag, CheckCircle2, 
   AlertCircle, Percent, Image as ImageIcon, PackagePlus, 
   Package, Truck, ClipboardList, LayoutDashboard, Settings,
-  LayoutGrid, Users, Download, KeyRound, Copy, Home as HomeIcon, Bell, Mail, Eye, Radio, Mic, Video, Layout, Type, Sparkles, Heart, Wifi, Archive
+  LayoutGrid, Users, Download, KeyRound, Copy, Home as HomeIcon, Bell, Mail, Eye, Radio, Mic, Video, Layout, Type, Sparkles, Heart, Wifi, Archive, Globe, Tv
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { db } from "../lib/firebase";
@@ -20,6 +20,7 @@ import { FoodSubcategoryManagement } from "../components/admin/FoodSubcategoryMa
 import { CategoryIconManagement } from "../components/admin/CategoryIconManagement";
 import { CategoryVisibilityManagement } from "../components/admin/CategoryVisibilityManagement";
 import { MainBannerManagement } from "../components/admin/MainBannerManagement";
+import { DisplaySignboardManagement } from "../components/admin/DisplaySignboardManagement";
 import { ReciterManagement } from "../components/admin/ReciterManagement";
 import { VideoTilawatManagement } from "../components/admin/VideoTilawatManagement";
 import { TemplateManagement } from "../components/admin/TemplateManagement";
@@ -33,6 +34,7 @@ import { FloatingBubbleAdminSettings } from "../components/admin/FloatingBubbleA
 import { BiodataManagement } from "../components/admin/BiodataManagement";
 import { TelecomManagement } from "../components/admin/TelecomManagement";
 import { PromoCodeManagement } from "../components/admin/PromoCodeManagement";
+import { GovAdmin } from "../components/admin/GovAdmin";
 import { DownloadCenter } from "../components/admin/DownloadCenter";
 import { useFirestoreCategories } from "../hooks/useCategories";
 import { CustomDropdown } from "../components/CustomDropdown";
@@ -65,7 +67,7 @@ const KEYSTORE_BASE64_STRING = "MIIKwgIBAzCCCngGCSqGSIb3DQEHAaCCCmkEggplMIIKYTCC
 export const Admin: React.FC = () => {
   // Navigation Menu State
   const [activeMenu, setActiveMenu] = useState<
-    "all-products" | "add-product" | "promo-codes" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "download-center" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management" | "caption-management" | "matrimonial-management" | "telecom-management" | "icon-management"
+    "all-products" | "add-product" | "promo-codes" | "banner-management" | "delivery-settings" | "delivery-management" | "orders" | "food-subcategories" | "category-icons" | "category-visibility" | "main-banners" | "integration-center" | "user-management" | "onesignal" | "signing-keystore" | "download-center" | "email-automation" | "floating-bubble" | "reciter-management" | "video-tilawat-management" | "template-management" | "font-management" | "caption-management" | "matrimonial-management" | "telecom-management" | "icon-management" | "gov-management"
   >("all-products");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedUserForNotification, setSelectedUserForNotification] = useState<any>(null);
@@ -382,7 +384,9 @@ export const Admin: React.FC = () => {
             { id: "food-subcategories", label: "খাদ্য সাব-ক্যাটাগরি", icon: LayoutGrid },
             { id: "category-icons", label: "ক্যাটাগরি ফটো", icon: ImageIcon },
             { id: "category-visibility", label: "ক্যাটাগরি দৃশ্যমানতা (On/Off)", icon: Eye },
-            { id: "main-banners", label: "মেইন ব্যানার", icon: ImageIcon },
+            { id: "signboard-video", label: "📺 ডিসপ্লে সাইনবোর্ড ভিডিও", icon: Tv },
+            { id: "main-banners", label: "🎬 হেডার ভিডিও ও মেইন স্লাইডার", icon: Video },
+            { id: "gov-management", label: "🏛️ সরকারি সেবা", icon: Globe },
             { id: "onesignal", label: "নোটিফিকেশন", icon: Bell },
             { id: "email-automation", label: "ইমেল অটোমেশন", icon: Mail },
             { id: "integration-center", label: "ইন্টিগ্রেশন", icon: Settings },
@@ -540,8 +544,26 @@ export const Admin: React.FC = () => {
                   }}
                 />
                 <MenuButton
+                  icon={<Tv className="text-emerald-600" />}
+                  label="📺 ডিসপ্লে সাইনবোর্ড ভিডিও ম্যানেজমেন্ট"
+                  active={activeMenu === "signboard-video"}
+                  onClick={() => {
+                    setActiveMenu("signboard-video");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
+                  icon={<Video className="text-rose-500" />}
+                  label="🎬 হেডার ভিডিও ও মেইন স্লাইডার"
+                  active={activeMenu === "main-banners"}
+                  onClick={() => {
+                    setActiveMenu("main-banners");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
                   icon={<ImageIcon />}
-                  label="ব্যানার ম্যানেজমেন্ট"
+                  label="ক্যাটাগরি ব্যানার ম্যানেজমেন্ট"
                   active={activeMenu === "banner-management"}
                   onClick={() => {
                     setActiveMenu("banner-management");
@@ -563,6 +585,15 @@ export const Admin: React.FC = () => {
                   active={activeMenu === "delivery-settings"}
                   onClick={() => {
                     setActiveMenu("delivery-settings");
+                    setIsDrawerOpen(false);
+                  }}
+                />
+                <MenuButton
+                  icon={<Globe className="text-emerald-600" />}
+                  label="🏛️ সরকারি সেবা ম্যানেজমেন্ট"
+                  active={activeMenu === "gov-management"}
+                  onClick={() => {
+                    setActiveMenu("gov-management");
                     setIsDrawerOpen(false);
                   }}
                 />
@@ -1065,9 +1096,17 @@ export const Admin: React.FC = () => {
         ) : activeMenu === "category-visibility" ? (
           /* VIEW 7.5: CATEGORY VISIBILITY ON/OFF CONTROL */
           <CategoryVisibilityManagement />
+        ) : activeMenu === "signboard-video" ? (
+          /* VIEW: DISPLAY SIGNBOARD VIDEO MANAGEMENT */
+          <DisplaySignboardManagement />
         ) : activeMenu === "main-banners" ? (
           /* VIEW 8: MAIN DASHBOARD BANNER MANAGEMENT */
           <MainBannerManagement />
+        ) : activeMenu === "gov-management" ? (
+          /* VIEW: GOV SERVICES MANAGEMENT */
+          <div className="w-full max-w-5xl px-2 sm:px-4 py-4">
+            <GovAdmin />
+          </div>
         ) : activeMenu === "onesignal" ? (
           /* VIEW 9: ONESIGNAL PUSH NOTIFICATIONS DIRECT */
           <div className="w-full max-w-4xl px-2 sm:px-4 py-4">

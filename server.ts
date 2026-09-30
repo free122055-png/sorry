@@ -133,10 +133,11 @@ try {
           console.log("[OneSignal] Push Success! ID:", pushResult.id);
           break;
         } else {
-          console.warn("[OneSignal] Push failed. Status:", res.status, "Payload:", JSON.stringify(pushResult));
+          const errDetail = pushResult?.errors?.[0] || `HTTP ${res.status}`;
+          console.log(`[OneSignal] Push notification response: ${errDetail}`);
         }
-      } catch (e) {
-        console.error("[OneSignal] Request exception:", e);
+      } catch (e: any) {
+        console.log("[OneSignal] Request exception:", e?.message || "Connection failed");
       }
     }
 
@@ -462,12 +463,27 @@ async function startServer() {
     next();
   });
 
-  // Ensure uploads directory exists and is publicly accessible
+  // Ensure uploads directory exists and is publicly accessible with Range request support for Android/iOS streaming
   const uploadsDir = path.join(process.cwd(), "public", "uploads");
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
   }
-  app.use("/uploads", express.static(uploadsDir));
+  app.use(
+    "/uploads",
+    express.static(uploadsDir, {
+      acceptRanges: true,
+      setHeaders: (res, filePath) => {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Accept-Ranges", "bytes");
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        if (filePath.endsWith(".mp4")) {
+          res.setHeader("Content-Type", "video/mp4");
+        } else if (filePath.endsWith(".webm")) {
+          res.setHeader("Content-Type", "video/webm");
+        }
+      },
+    })
+  );
 
   // ---------------------------------------------------------------------------
   // PREMIUM HUMAN-LIKE TTS SERVICE (Edge TTS Engine)

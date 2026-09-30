@@ -16,7 +16,7 @@ import { VideoTilawatSection } from "../components/tilawat/VideoTilawatSection";
 
 export const IslamicTilawat: React.FC = () => {
   const navigate = useNavigate();
-  const [mediaMode, setMediaMode] = useState<"video">("video");
+  const [mediaMode, setMediaMode] = useState<"video" | "audio">("video");
   const {
     reciters,
     surahs,

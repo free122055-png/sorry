@@ -4,7 +4,7 @@ import {
   Plus, ShoppingBag, ChevronRight,
   Sparkles, Gift, BookOpen, Music,
   Shirt, Moon, Layers, Heart, Wifi, Bell, ShieldAlert, Droplet, Package, Headphones, PenTool, Palette, Users, Smartphone, Clock, Book,
-  Utensils, Brush, BookOpenText, FileText, Router, CalendarCheck, Coffee, ShoppingBasket, BookCopy, Camera, HeartPulse, ReceiptText
+  Utensils, Brush, BookOpenText, FileText, Router, CalendarCheck, Coffee, ShoppingBasket, BookCopy, Camera, HeartPulse, ReceiptText, MapPin, Globe
 } from "lucide-react";
 import { motion } from "motion/react";
 import { SEO } from "../components/SEO";
@@ -13,7 +13,7 @@ import { DynamicBannerSlider } from "../components/DynamicBannerSlider";
 import { AnimatedSearchInput } from "../components/AnimatedSearchInput";
 import { useAuth } from "../context/AuthContext";
 import { db } from "../lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, onSnapshot } from "firebase/firestore";
 
 const MARKET_CATEGORIES = [
   {
@@ -62,21 +62,21 @@ const FEATURE_SERVICES: FeatureCardItem[] = [
     id: "caption",
     name: "ক্যাপশন",
     icon: <FileText className="w-5 h-5 text-white" />,
-    iconBg: "bg-pink-600",
+    iconBg: "bg-[#0a3d2e]",
     path: "/caption-ghor"
   },
   {
     id: "editing",
     name: "এডিটিং",
     icon: <Camera className="w-5 h-5 text-white" />,
-    iconBg: "bg-slate-800",
+    iconBg: "bg-[#0a3d2e]",
     path: "/pixel-editing-tools"
   },
   {
     id: "matrimonial",
     name: "বায়োডাটা",
     icon: <HeartPulse className="w-5 h-5 text-white" />,
-    iconBg: "bg-rose-700",
+    iconBg: "bg-[#0a3d2e]",
     path: "/matrimonial"
   },
   {
@@ -90,21 +90,34 @@ const FEATURE_SERVICES: FeatureCardItem[] = [
     id: "reminder",
     name: "রিমাইন্ডার",
     icon: <ReceiptText className="w-5 h-5 text-white" />,
-    iconBg: "bg-blue-600",
+    iconBg: "bg-[#0a3d2e]",
     path: "/reminders"
+  },
+  {
+    id: "live_location",
+    name: "লাইভ লোকেশন",
+    icon: <MapPin className="w-5 h-5 text-white" />,
+    iconBg: "bg-[#004b23]",
+    path: "/live-location"
+  },
+  {
+    id: "gov_services",
+    name: "সরকারি সেবা",
+    icon: <Globe className="w-5 h-5 text-white" />,
+    iconBg: "bg-[#0a3d2e]",
+    path: "/gov-services"
   }
 ];
 
 // Define a mapping for frame colors based on category ID or type
 const getFrameColor = (iconBg: string) => {
-  if (iconBg.includes("amber")) return "border-amber-500";
-  if (iconBg.includes("sky") || iconBg.includes("blue")) return "border-blue-500";
-  if (iconBg.includes("orange")) return "border-orange-500";
-  if (iconBg.includes("green")) return "border-emerald-500";
-  if (iconBg.includes("pink")) return "border-pink-500";
-  if (iconBg.includes("slate")) return "border-slate-500";
-  if (iconBg.includes("rose")) return "border-rose-500";
-  return "border-gray-300";
+  if (iconBg.includes("amber") || iconBg.includes("orange")) return "border-emerald-600";
+  if (iconBg.includes("sky") || iconBg.includes("blue")) return "border-emerald-600";
+  if (iconBg.includes("pink")) return "border-emerald-600";
+  if (iconBg.includes("slate")) return "border-emerald-600";
+  if (iconBg.includes("rose")) return "border-emerald-600";
+  if (iconBg.includes("emerald") || iconBg.includes("#004b23") || iconBg.includes("#0a3d2e") || iconBg.includes("#044a2f")) return "border-emerald-600";
+  return "border-emerald-600";
 };
 
 export const Home: React.FC = () => {
@@ -114,28 +127,32 @@ export const Home: React.FC = () => {
   const [customIcons, setCustomIcons] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const fetchIcons = async () => {
-      // 1. Try to load from localStorage first
-      const cachedIcons = localStorage.getItem('custom_icons');
-      if (cachedIcons) {
-        setCustomIcons(JSON.parse(cachedIcons));
-      }
+    // 1. Load cached custom icons from localStorage for 0ms instant display
+    const cached = localStorage.getItem('custom_icons');
+    if (cached) {
+      try {
+        setCustomIcons(JSON.parse(cached));
+      } catch (e) {}
+    }
 
-      // 2. Fetch from Firestore in background
+    // 2. Real-time listener on configs_icons collection
+    const unsub = onSnapshot(collection(db, 'configs_icons'), (snapshot) => {
       const icons: Record<string, string> = {};
-      const allItems = [...MARKET_CATEGORIES, ...FEATURE_SERVICES];
-      for (const cat of allItems) {
-        const docSnap = await getDoc(doc(db, 'configs_icons', cat.id));
-        if (docSnap.exists() && docSnap.data().url) {
-          icons[cat.id] = docSnap.data().url;
+      snapshot.docs.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.url) {
+          icons[docSnap.id] = data.url;
         }
-      }
-      
-      // 3. Update state and localStorage if icons changed
+      });
       setCustomIcons(icons);
-      localStorage.setItem('custom_icons', JSON.stringify(icons));
-    };
-    fetchIcons();
+      try {
+        localStorage.setItem('custom_icons', JSON.stringify(icons));
+      } catch (e) {}
+    }, (error) => {
+      console.warn("Custom icons real-time listener notice:", error);
+    });
+
+    return () => unsub();
   }, []);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,14 +207,13 @@ export const Home: React.FC = () => {
           {/* Section: Main Markets */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="relative">
+              <div>
                 <h3 className="text-[19px] font-black text-[#0f172a] tracking-tight">আমাদের প্রধান বাজার সমূহ</h3>
-                <div className="absolute -bottom-2 left-0 w-10 h-1 bg-[#10b981] rounded-full" />
               </div>
             </div>
 
             {/* Market Categories (4 items) - Circular Premium Style */}
-            <div className="grid grid-cols-4 gap-3 sm:gap-4 px-1 sm:px-2">
+            <div className="grid grid-cols-4 gap-x-2 sm:gap-x-3 gap-y-5 px-0 justify-items-center">
 
               {MARKET_CATEGORIES.map((cat) => (
                 <motion.div
@@ -206,8 +222,8 @@ export const Home: React.FC = () => {
                   onClick={() => navigate(`/category/${cat.id}`)}
                   className="flex flex-col items-center gap-1.5 cursor-pointer group"
                 >
-                  <div className={`w-[84px] h-[86px] sm:w-[90px] sm:h-[92px] rounded-2xl bg-white border ${getFrameColor(cat.iconBg)} flex flex-col items-center justify-center p-1.5 transition-all shadow-xs`}>
-                      <div className={`w-[48px] h-[48px] rounded-full ${cat.iconBg} flex items-center justify-center mb-1 overflow-hidden shadow-xs`}>
+                  <div className={`w-[78px] h-[82px] sm:w-[90px] sm:h-[92px] rounded-2xl bg-white border ${getFrameColor(cat.iconBg)} flex flex-col items-center justify-center p-1.5 transition-all shadow-xs`}>
+                      <div className={`w-[44px] h-[44px] rounded-full ${cat.iconBg} flex items-center justify-center mb-1 overflow-hidden shadow-xs`}>
                         {customIcons[cat.id] ? (
                           <img src={customIcons[cat.id]} alt={cat.name} className="w-full h-full object-cover" />
                         ) : (
@@ -222,13 +238,12 @@ export const Home: React.FC = () => {
 
             {/* Section: Feature Services - Circular Premium Style */}
             <div className="mt-8 mb-4">
-              <div className="relative">
+              <div>
                 <h3 className="text-[19px] font-black text-[#0f172a] tracking-tight">অন্যান্য সেবা</h3>
-                <div className="absolute -bottom-2 left-0 w-10 h-1 bg-blue-600 rounded-full" />
               </div>
             </div>
             
-            <div className="grid grid-cols-4 gap-x-2 sm:gap-x-3 gap-y-5 px-1">
+            <div className="grid grid-cols-4 gap-x-2 sm:gap-x-3 gap-y-5 px-0 justify-items-center">
               {FEATURE_SERVICES.map((item) => (
                 <motion.div
                   key={item.id}
@@ -236,8 +251,8 @@ export const Home: React.FC = () => {
                   onClick={() => navigate(item.path)}
                   className="flex flex-col items-center gap-1.5 cursor-pointer group"
                 >
-                  <div className={`w-[84px] h-[86px] sm:w-[90px] sm:h-[92px] rounded-2xl bg-white border ${getFrameColor(item.iconBg)} flex flex-col items-center justify-center p-1.5 transition-all shadow-xs`}>
-                      <div className={`w-[48px] h-[48px] rounded-full ${item.iconBg} flex items-center justify-center mb-1 overflow-hidden shadow-xs`}>
+                  <div className={`w-[78px] h-[82px] sm:w-[90px] sm:h-[92px] rounded-2xl bg-white border ${getFrameColor(item.iconBg)} flex flex-col items-center justify-center p-1.5 transition-all shadow-xs`}>
+                      <div className={`w-[44px] h-[44px] rounded-full ${item.iconBg} flex items-center justify-center mb-1 overflow-hidden shadow-xs`}>
                         {customIcons[item.id] ? (
                           <img src={customIcons[item.id]} alt={item.name} className="w-full h-full object-cover" />
                         ) : (

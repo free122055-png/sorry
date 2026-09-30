@@ -34,7 +34,8 @@ import {
   Tag,
   Percent,
   Plus,
-  Wifi
+  Wifi,
+  Globe
 } from "lucide-react";
 import { db } from "../lib/firebase";
 import { collection, query, onSnapshot, getDocs, limit, addDoc } from "firebase/firestore";
@@ -63,6 +64,7 @@ import { FloatingBubbleAdminSettings } from "../components/admin/FloatingBubbleA
 import { BiodataManagement } from "../components/admin/BiodataManagement";
 import { TelecomManagement } from "../components/admin/TelecomManagement";
 import { PromoCodeManagement } from "../components/admin/PromoCodeManagement";
+import { GovAdmin } from "../components/admin/GovAdmin";
 import { useFirestoreCategories } from "../hooks/useCategories";
 import { CustomDropdown } from "../components/CustomDropdown";
 
@@ -510,19 +512,25 @@ export const StandaloneAdmin: React.FC = () => {
               <NavButton id="promo-codes" icon={Tag} label="প্রমো কোড ম্যানেজমেন্ট" />
             </div>
 
-            {/* 3. Telecom Service */}
+            {/* 3. Government Services */}
+            <div className="space-y-1">
+              <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider px-2">সরকারি সেবা ডিরেক্টরি</span>
+              <NavButton id="gov-management" icon={Globe} label="সরকারি সেবা সেটিংস" />
+            </div>
+
+            {/* 4. Telecom Service */}
             <div className="space-y-1">
               <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider px-2">টেলিকম সার্ভিস</span>
               <NavButton id="telecom-management" icon={Wifi} label="টেলিকম অফার ও অর্ডার" />
             </div>
 
-            {/* 4. Matrimonial */}
+            {/* 5. Matrimonial */}
             <div className="space-y-1">
               <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider px-2">ইসলামিক ম্যাট্রিমনিয়াল</span>
               <NavButton id="matrimonial-management" icon={Heart} label="বায়োডাটা ও রিকোয়েস্ট" badge={stats.biodatasCount} />
             </div>
 
-            {/* 4. Users & Marketing */}
+            {/* 6. Users & Marketing */}
             <div className="space-y-1">
               <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider px-2">ব্যবহারকারী ও মার্কেটিং</span>
               <NavButton id="user-management" icon={Users} label="ইউজার তালিকা" badge={stats.usersCount} />
@@ -530,14 +538,14 @@ export const StandaloneAdmin: React.FC = () => {
               <NavButton id="email-automation" icon={Bell} label="অটো ইমেইল অটোমেশন" />
             </div>
 
-            {/* 5. Islamic Content */}
+            {/* 7. Islamic Content */}
             <div className="space-y-1">
               <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider px-2">ইসলামিক কন্টেন্ট</span>
               <NavButton id="reciter-management" icon={Radio} label="ক্বারী ম্যানেজমেন্ট" />
               <NavButton id="video-tilawat-management" icon={Video} label="ভিডিও তিলাওয়াত" />
             </div>
 
-            {/* 6. Pixel Tools & Settings */}
+            {/* 8. Pixel Tools & Settings */}
             <div className="space-y-1">
               <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider px-2">টুলস ও সিস্টেম</span>
               <NavButton id="template-management" icon={Layout} label="পিক্সেল টেমপ্লেট" />
@@ -805,6 +813,7 @@ export const StandaloneAdmin: React.FC = () => {
             {activeMenu === "banner-management" && <BannerManagement />}
             {activeMenu === "delivery-settings" && <DeliverySettings />}
             {activeMenu === "delivery-management" && <CourierDeliveryManagement />}
+            {activeMenu === "gov-management" && <GovAdmin />}
             {activeMenu === "matrimonial-management" && <BiodataManagement />}
             {activeMenu === "telecom-management" && <TelecomManagement />}
             {activeMenu === "promo-codes" && <PromoCodeManagement />}

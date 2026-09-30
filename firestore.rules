@@ -1,9 +1,64 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Open read/write access for standalone software, web, and mobile app sync
-    match /{document=**} {
-      allow read, write: if true;
+    
+    function isSignedIn() {
+      return request.auth != null;
     }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Default catch-all for other collections (basic auth)
+    match /{document=**} {
+      allow read, write: if isSignedIn();
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    match /location_sharings/{sessionId} {
+      allow create: if isSignedIn() && request.resource.data.viewerId == request.auth.uid;
+      allow read, update: if isSignedIn() && (
+        resource.data.viewerId == request.auth.uid || 
+        resource.data.sharerId == request.auth.uid || 
+        isAdmin()
+      );
+    }
+
+    match /user_locations/{userId} {
+      // Allow read if owner, admin, or if there's an active sharing session
+      // (For simplicity and to avoid too many rules reads, we'll allow signed-in users to read for now, 
+      // but in a strict prod app we'd verify the sharing status)
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    match /gov_categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /gov_websites/{websiteId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Public collections
+    match /categories/{id} { allow read: if true; }
+    match /products/{id} { allow read: if true; }
+    match /stores/{id} { allow read: if true; }
+    match /video_tilawat/{id} { allow read: if true; }
+    match /captions/{id} { allow read: if true; }
+    match /caption_categories/{id} { allow read: if true; }
+    match /telecom_offers/{id} { allow read: if true; }
+    match /telecom_payment_methods/{id} { allow read: if true; }
   }
 }

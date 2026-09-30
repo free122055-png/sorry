@@ -101,8 +101,6 @@ export const AnimatedBrandLogo: React.FC<{ isCompact?: boolean }> = ({ isCompact
         >
           {displayedMain}
         </span>
-        {/* Blinking Glowing Cursor */}
-        <span className="inline-block w-[2.5px] h-5 sm:h-6 bg-[#ffb703] ml-0.5 rounded-full animate-pulse shadow-[0_0_8px_rgba(255,183,3,0.8)]" />
       </div>
 
       {/* Subtitle / Bottom Line (BAZAR / বাজার / সুপারশপ) */}

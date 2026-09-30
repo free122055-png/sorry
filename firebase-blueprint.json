@@ -365,6 +365,62 @@
         "updatedAt": { "type": "number" }
       },
       "required": ["code", "discountType", "discountValue", "status"]
+    },
+    "LocationSharing": {
+      "title": "Location Sharing Session",
+      "description": "A session for real-time location sharing between two users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "viewerId": { "type": "string" },
+        "viewerName": { "type": "string" },
+        "sharerId": { "type": "string" },
+        "sharerName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "active", "rejected", "stopped"] },
+        "sharingStartedAt": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      }
+    },
+    "UserLocation": {
+      "title": "User Location",
+      "description": "Real-time GPS coordinates of a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "speed": { "type": "number" },
+        "heading": { "type": "number" },
+        "accuracy": { "type": "number" },
+        "lastUpdated": { "type": "number" }
+      }
+    },
+    "GovCategory": {
+      "title": "Government Service Category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "order": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "icon"]
+    },
+    "GovWebsite": {
+      "title": "Government Website",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "url": { "type": "string" },
+        "isPopular": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["categoryId", "name", "url"]
     }
   },
   "firestore": {
@@ -447,6 +503,22 @@
     "promo_codes/{promoId}": {
       "schema": "PromoCode",
       "description": "Promo codes for discount validation"
+    },
+    "location_sharings/{sessionId}": {
+      "schema": "LocationSharing",
+      "description": "Real-time location sharing sessions between users"
+    },
+    "user_locations/{userId}": {
+      "schema": "UserLocation",
+      "description": "Real-time user GPS data"
+    },
+    "gov_categories/{categoryId}": {
+      "schema": "GovCategory",
+      "description": "Categories for government services"
+    },
+    "gov_websites/{websiteId}": {
+      "schema": "GovWebsite",
+      "description": "Official government website links"
     }
   }
 }

@@ -30,7 +30,6 @@ import { useCart } from "../context/CartContext";
 import { useNotificationContext } from "../context/NotificationContext";
 import { auth } from "../lib/firebase";
 import { signOut } from "firebase/auth";
-import { AnimatedBrandLogo } from "./AnimatedBrandLogo";
 import { getApiUrl } from "../lib/api";
 
 interface MenuDrawerProps {
@@ -125,46 +124,77 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
 
   return (
     <>
-      {/* Background Dimmed Overlay */}
+      {/* Background Dimmed Overlay - Fast hardware-accelerated fade without heavy backdrop blur */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.16, ease: "easeOut" }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[999] transition-opacity"
+            style={{ touchAction: "manipulation" }}
+            className="fixed inset-0 bg-black/60 z-[999]"
           />
         )}
       </AnimatePresence>
 
-      {/* Slide-out Menu Drawer */}
+      {/* Slide-out Menu Drawer - Ultra-fast 60fps GPU Tween Slide */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ x: "-100%" }}
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
-            transition={{ type: "spring", damping: 28, stiffness: 280 }}
-            className="fixed top-0 left-0 bottom-0 w-[88%] max-w-[360px] bg-[#f4f6f8] text-gray-800 z-[1000] shadow-2xl flex flex-col overflow-hidden"
+            transition={{ type: "tween", duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            style={{ touchAction: "manipulation", willChange: "transform" }}
+            className="fixed top-0 left-0 bottom-0 w-[88%] max-w-[360px] bg-[#f4f6f8] text-gray-800 z-[1000] shadow-2xl flex flex-col overflow-hidden transform-gpu"
           >
             {/* Dark Green Brand Header */}
-            <div className="bg-gradient-to-b from-[#022318] to-[#004b23] text-white pt-6 pb-6 px-5 relative overflow-hidden shrink-0 border-b border-emerald-800/40">
+            <div className="bg-gradient-to-b from-[#022318] to-[#004b23] text-white pt-6 pb-5 px-5 relative overflow-hidden shrink-0 border-b border-emerald-800/40">
               
               {/* Close Button Top Right */}
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all active:scale-95 border border-white/10"
+                style={{ touchAction: "manipulation" }}
+                className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all active:scale-90 border border-white/10 cursor-pointer"
                 aria-label="Close Menu"
                 title="মেনু বন্ধ করুন"
               >
                 <X className="w-5 h-5 stroke-[2.2]" />
               </button>
 
-              {/* Logo Branding */}
-              <div className="flex flex-col items-center justify-center text-center mt-1 mb-5" onClick={onClose}>
-                <AnimatedBrandLogo />
-                <div className="text-[11px] font-medium text-[#ffb703]/90 mt-1.5 tracking-normal">
+              {/* High-Performance Static Brand Logo */}
+              <div 
+                className="flex flex-col items-center justify-center text-center mt-1 mb-4 cursor-pointer select-none" 
+                onClick={() => handleNavigate("/")}
+                style={{ touchAction: "manipulation" }}
+              >
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-[10px] sm:text-[11px] font-black tracking-[0.22em] text-white/95 uppercase">
+                    সেরা
+                  </span>
+                  <div className="bg-[#ffb703] p-0.5 rounded-[4px] shadow-xs flex items-center justify-center">
+                    <svg 
+                      width="12" 
+                      height="12" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="#000" 
+                      strokeWidth="3.5" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                    >
+                      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>
+                      <path d="M3 6h18"/>
+                      <path d="M16 10a4 4 0 0 1-8 0"/>
+                    </svg>
+                  </div>
+                </div>
+                <div className="text-[20px] sm:text-[22px] font-black tracking-tight leading-tight text-white drop-shadow-xs">
+                  আল মায়াদীন বাজার
+                </div>
+                <div className="text-[11px] font-medium text-[#ffb703]/90 mt-1 tracking-normal">
                   আপনার বাজার, আপনার ঠিকানা
                 </div>
               </div>
@@ -172,7 +202,8 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
               {/* Profile Card Header */}
               <div 
                 onClick={() => handleNavigate("/account-settings")}
-                className="cursor-pointer bg-white text-gray-900 rounded-2xl p-3.5 shadow-lg flex items-center justify-between border border-white/80 active:scale-[0.99] transition-all relative overflow-hidden group"
+                style={{ touchAction: "manipulation" }}
+                className="cursor-pointer bg-white text-gray-900 rounded-2xl p-3.5 shadow-lg flex items-center justify-between border border-white/80 active:scale-[0.98] transition-all relative overflow-hidden group"
               >
                 <div className="absolute right-0 top-0 bottom-0 w-28 opacity-10 pointer-events-none flex items-center justify-end pr-2 text-emerald-900">
                   <Sparkles className="w-16 h-16" />

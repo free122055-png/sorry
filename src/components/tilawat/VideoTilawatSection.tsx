@@ -1,12 +1,25 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { 
   ArrowLeft, Cast, Download, Heart, MoreVertical, Play, Pause, 
   RotateCcw, RotateCw, SkipBack, SkipForward, Volume2, VolumeX, 
   Maximize, Minimize, Tv2, BookOpen, ChevronRight, Share2, 
-  Check, Film, Loader2, RefreshCw, AlertCircle
+  Check, Film, Loader2, RefreshCw, AlertCircle, CheckCircle2,
+  Trash2, Wifi, WifiOff, HardDriveDownload
 } from "lucide-react";
 import { db } from "../../lib/firebase";
+import { BACKEND_URL } from "../../lib/api";
 import { collection, query, orderBy, onSnapshot, getDocs } from "firebase/firestore";
+import {
+  downloadAndSaveVideo,
+  getOfflineVideoBlobUrl,
+  deleteOfflineVideo,
+  isVideoDownloaded,
+  getDownloadedVideoIds,
+  getAllOfflineVideos,
+  cacheTilawatVideosList,
+  getCachedTilawatVideosList,
+  DownloadProgress
+} from "../../services/videoOfflineService";
 
 export interface VideoTilawatItem {
   id: string;
@@ -24,6 +37,10 @@ export interface VideoTilawatItem {
   description: string;
   tags: string[];
   createdAt?: number;
+  isOfflineAvailable?: boolean;
+  offlineSavedAt?: number;
+  offlineSizeBytes?: number;
+  offlineSizeFormatted?: string;
 }
 
 interface VideoTilawatSectionProps {
@@ -43,9 +60,19 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
       url = url.replace("http://", "https://");
     }
     if (url.startsWith("/uploads/")) {
-      if (typeof window !== "undefined" && window.location.origin) {
+      const isCapacitor = 
+        typeof window !== "undefined" && 
+        (window.location.protocol === "capacitor:" || 
+         window.location.protocol === "file:" || 
+         (window as any).Capacitor !== undefined);
+
+      if (isCapacitor) {
+        return `${BACKEND_URL}${url}`;
+      }
+      if (typeof window !== "undefined" && window.location.origin && !window.location.origin.startsWith("file://") && !window.location.origin.startsWith("capacitor://")) {
         return `${window.location.origin}${url}`;
       }
+      return `${BACKEND_URL}${url}`;
     }
     return url;
   };
@@ -59,10 +86,25 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
       : null;
   };
 
-  // Real Firestore Videos state (Demo data removed completely)
-  const [videos, setVideos] = useState<VideoTilawatItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [currentVideo, setCurrentVideo] = useState<VideoTilawatItem | null>(null);
+  // Real Firestore Videos state with instant offline cache fallback
+  const [videos, setVideos] = useState<VideoTilawatItem[]>(() => {
+    return getCachedTilawatVideosList();
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    const cached = getCachedTilawatVideosList();
+    return cached.length === 0;
+  });
+  const [currentVideo, setCurrentVideo] = useState<VideoTilawatItem | null>(() => {
+    const cached = getCachedTilawatVideosList();
+    return cached.length > 0 ? cached[0] : null;
+  });
+
+  // Offline Download & Playback states
+  const [downloadedIds, setDownloadedIds] = useState<string[]>(() => getDownloadedVideoIds());
+  const [downloadProgressMap, setDownloadProgressMap] = useState<Record<string, DownloadProgress>>({});
+  const [localBlobUrl, setLocalBlobUrl] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [activeTab, setActiveTab] = useState<"all" | "downloaded" | "favorites">("all");
 
   // Video playback states
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -88,9 +130,36 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 1. Fetch live uploaded videos from Firestore
+  // Monitor network online / offline events
   useEffect(() => {
-    setLoading(true);
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // Initial check of offline items from IndexedDB
+    getAllOfflineVideos().then((offlineItems) => {
+      if (offlineItems && offlineItems.length > 0) {
+        setVideos((prev) => {
+          if (prev.length === 0) {
+            setCurrentVideo(offlineItems[0]);
+            setLoading(false);
+            return offlineItems;
+          }
+          return prev;
+        });
+      }
+    });
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  // 1. Fetch live uploaded videos from Firestore (cache updated list for 100% offline access)
+  useEffect(() => {
     const q = query(collection(db, "video_tilawat"), orderBy("createdAt", "desc"));
     
     const unsubscribe = onSnapshot(
@@ -103,6 +172,7 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
         // Filter out drafts - only show published videos to users
         const publishedList = list.filter((v: any) => v.publishedStatus !== "draft");
         setVideos(publishedList);
+        cacheTilawatVideosList(publishedList);
         setLoading(false);
         if (publishedList.length > 0) {
           setCurrentVideo((prev) => {
@@ -122,19 +192,22 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
             snap.forEach((doc) => {
               list.push({ id: doc.id, ...doc.data() } as VideoTilawatItem);
             });
-            // Client-side sort by createdAt descending
             list.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
             const publishedList = list.filter((v: any) => v.publishedStatus !== "draft");
-            setVideos(publishedList);
-            setLoading(false);
             if (publishedList.length > 0) {
+              setVideos(publishedList);
+              cacheTilawatVideosList(publishedList);
               setCurrentVideo((prev) => prev || publishedList[0]);
-            } else {
-              setCurrentVideo(null);
             }
+            setLoading(false);
           })
-          .catch((e) => {
-            console.error("Firestore fetch error:", e);
+          .catch(async (e) => {
+            console.error("Firestore fetch error, falling back to offline IndexedDB:", e);
+            const offlineItems = await getAllOfflineVideos();
+            if (offlineItems.length > 0) {
+              setVideos(offlineItems);
+              setCurrentVideo((prev) => prev || offlineItems[0]);
+            }
             setLoading(false);
           });
       }
@@ -142,6 +215,45 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
 
     return () => unsubscribe();
   }, []);
+
+  // 2. Resolve offline blob playback when currentVideo changes or download completes
+  useEffect(() => {
+    let isMounted = true;
+    let activeUrl: string | null = null;
+
+    async function resolveSource() {
+      if (!currentVideo) {
+        setLocalBlobUrl(null);
+        return;
+      }
+
+      if (isVideoDownloaded(currentVideo.id)) {
+        try {
+          const blobUrl = await getOfflineVideoBlobUrl(currentVideo.id);
+          if (isMounted && blobUrl) {
+            activeUrl = blobUrl;
+            setLocalBlobUrl(blobUrl);
+            return;
+          }
+        } catch (e) {
+          console.warn("Could not load offline blob, falling back to network url:", e);
+        }
+      }
+
+      if (isMounted) {
+        setLocalBlobUrl(null);
+      }
+    }
+
+    resolveSource();
+
+    return () => {
+      isMounted = false;
+      if (activeUrl) {
+        URL.revokeObjectURL(activeUrl);
+      }
+    };
+  }, [currentVideo?.id, downloadedIds]);
 
   // 2. Hide controls automatically after 3.5 seconds of playing
   const resetControlsTimeout = () => {
@@ -252,18 +364,80 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
     });
   };
 
+  // Filter videos based on active tab (All, Downloaded, Favorites)
+  const filteredVideos = useMemo(() => {
+    if (activeTab === "downloaded") {
+      return videos.filter((v) => downloadedIds.includes(v.id));
+    }
+    if (activeTab === "favorites") {
+      return videos.filter((v) => !!favorites[v.id]);
+    }
+    return videos;
+  }, [videos, activeTab, downloadedIds, favorites]);
+
   const handleNextVideo = () => {
-    if (!currentVideo || videos.length === 0) return;
-    const currentIndex = videos.findIndex((v) => v.id === currentVideo.id);
-    const nextIndex = (currentIndex + 1) % videos.length;
-    selectVideo(videos[nextIndex]);
+    const list = filteredVideos.length > 0 ? filteredVideos : videos;
+    if (!currentVideo || list.length === 0) return;
+    const currentIndex = list.findIndex((v) => v.id === currentVideo.id);
+    const nextIndex = (currentIndex + 1) % list.length;
+    selectVideo(list[nextIndex]);
   };
 
   const handlePrevVideo = () => {
-    if (!currentVideo || videos.length === 0) return;
-    const currentIndex = videos.findIndex((v) => v.id === currentVideo.id);
-    const prevIndex = (currentIndex - 1 + videos.length) % videos.length;
-    selectVideo(videos[prevIndex]);
+    const list = filteredVideos.length > 0 ? filteredVideos : videos;
+    if (!currentVideo || list.length === 0) return;
+    const currentIndex = list.findIndex((v) => v.id === currentVideo.id);
+    const prevIndex = (currentIndex - 1 + list.length) % list.length;
+    selectVideo(list[prevIndex]);
+  };
+
+  const handleDownloadVideo = async (item: VideoTilawatItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const resolvedUrl = normalizeVideoUrl(item.videoUrl);
+    if (!resolvedUrl) {
+      alert("ভিডিওর লিংক খুঁজে পাওয়া যায়নি।");
+      return;
+    }
+
+    setDownloadProgressMap((prev) => ({
+      ...prev,
+      [item.id]: {
+        videoId: item.id,
+        progress: 1,
+        downloadedMB: "0 MB",
+        totalMB: "শুরু হচ্ছে...",
+        status: "downloading",
+      },
+    }));
+
+    const success = await downloadAndSaveVideo(item, resolvedUrl, (prog) => {
+      setDownloadProgressMap((prev) => ({
+        ...prev,
+        [item.id]: prog,
+      }));
+    });
+
+    if (success) {
+      const updated = getDownloadedVideoIds();
+      setDownloadedIds(updated);
+      if (currentVideo?.id === item.id) {
+        const blobUrl = await getOfflineVideoBlobUrl(item.id);
+        if (blobUrl) setLocalBlobUrl(blobUrl);
+      }
+    }
+  };
+
+  const handleDeleteOfflineVideo = async (item: VideoTilawatItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const confirmDelete = window.confirm(`"${item.surahName}" অফলাইন স্টোরেজ থেকে মুছে ফেলতে চান?`);
+    if (!confirmDelete) return;
+
+    await deleteOfflineVideo(item.id);
+    const updated = getDownloadedVideoIds();
+    setDownloadedIds(updated);
+    if (currentVideo?.id === item.id) {
+      setLocalBlobUrl(null);
+    }
   };
 
   const handleVideoEnded = () => {
@@ -383,17 +557,35 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
             <Cast className="w-4 h-4" />
           </button>
 
-          {currentVideo?.videoUrl && (
-            <a
-              href={normalizeVideoUrl(currentVideo.videoUrl)}
-              download
-              target="_blank"
-              rel="noopener noreferrer"
-              title="ভিডিও ডাউনলোড করুন"
-              className="w-9 h-9 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white transition-colors cursor-pointer"
-            >
-              <Download className="w-4 h-4" />
-            </a>
+          {currentVideo && (
+            downloadedIds.includes(currentVideo.id) ? (
+              <button
+                onClick={(e) => handleDeleteOfflineVideo(currentVideo, e)}
+                title="অফলাইনে সংরক্ষিত (ক্লিক করে মুছুন)"
+                className="px-2.5 py-1.5 rounded-full flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs font-bold transition-all cursor-pointer hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/40 group"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 group-hover:hidden" />
+                <Trash2 className="w-3.5 h-3.5 hidden group-hover:inline" />
+                <span className="text-[11px] group-hover:hidden">অফলাইন</span>
+                <span className="text-[11px] hidden group-hover:inline">মুছুন</span>
+              </button>
+            ) : downloadProgressMap[currentVideo.id]?.status === "downloading" ? (
+              <div
+                title="ডাউনলোড হচ্ছে..."
+                className="px-2.5 py-1.5 rounded-full flex items-center gap-1.5 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-bold"
+              >
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                <span className="text-[11px]">{downloadProgressMap[currentVideo.id].progress}%</span>
+              </div>
+            ) : (
+              <button
+                onClick={(e) => handleDownloadVideo(currentVideo, e)}
+                title="অফলাইনে সেভ করুন (ইন্টারনেট ছাড়া দেখতে)"
+                className="w-9 h-9 rounded-full flex items-center justify-center bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 transition-colors cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            )
           )}
 
           {currentVideo && (
@@ -409,6 +601,25 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
           )}
         </div>
       </header>
+
+      {/* Offline Alert Banner */}
+      {!isOnline && (
+        <div className="mx-4 mt-3 p-3 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200">
+          <div className="flex items-center gap-2">
+            <WifiOff className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <div>
+              <p className="font-bold">আপনি বর্তমানে অফলাইনে আছেন</p>
+              <p className="text-[11px] text-amber-300/80">ডাউনলোড করা ভিডিওগুলো কোনো ইন্টারনেট ছাড়াই চলবে।</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setActiveTab("downloaded")}
+            className="px-3 py-1.5 bg-amber-400 text-black font-bold rounded-xl text-[11px] whitespace-nowrap cursor-pointer hover:bg-amber-300 transition active:scale-95"
+          >
+            অফলাইন ভিডিও ({downloadedIds.length})
+          </button>
+        </div>
+      )}
 
       {/* 2. LOADING STATE */}
       {loading && (
@@ -489,13 +700,15 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
                   );
                 }
 
-                if (normUrl) {
+                const effectiveSrc = localBlobUrl || normUrl;
+
+                if (effectiveSrc) {
                   return (
                     <>
                       <video
                         ref={videoRef}
-                        key={currentVideo.id + normUrl}
-                        src={normUrl}
+                        key={currentVideo.id + (localBlobUrl ? "-offline" : "-online")}
+                        src={effectiveSrc}
                         poster={posterUrl}
                         playsInline
                         webkit-playsinline="true"
@@ -509,7 +722,12 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
                           setIsBuffering(false);
                           setHasPlaybackError(false);
                         }}
-                        onCanPlay={() => setIsBuffering(false)}
+                        onCanPlay={() => {
+                          setIsBuffering(false);
+                          if (isPlaying && videoRef.current && videoRef.current.paused) {
+                            videoRef.current.play().catch(() => {});
+                          }
+                        }}
                         onError={() => {
                           setIsBuffering(false);
                           setHasPlaybackError(true);
@@ -530,6 +748,14 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
                         className="w-full h-full object-cover sm:object-contain bg-black cursor-pointer"
                       />
 
+                      {/* Offline Mode Playing Badge */}
+                      {localBlobUrl && (
+                        <div className="absolute top-3 left-3 z-20 px-2.5 py-1 rounded-full bg-emerald-600/90 backdrop-blur-md text-white text-[10px] font-bold flex items-center gap-1.5 shadow-lg border border-emerald-400/40 pointer-events-none">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-200" />
+                          <span>অফলাইন মেমোরি থেকে চলছে</span>
+                        </div>
+                      )}
+
                       {/* Buffering Spinner */}
                       {isBuffering && isPlaying && !hasPlaybackError && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 pointer-events-none z-20">
@@ -538,24 +764,48 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
                         </div>
                       )}
 
-                      {/* Playback Error Overlay with Retry */}
+                      {/* Playback Error Overlay with Retry / Offline switcher */}
                       {hasPlaybackError && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20 p-4 text-center">
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/85 z-20 p-4 text-center">
                           <AlertCircle className="w-10 h-10 text-rose-500 mb-2" />
-                          <p className="text-sm font-bold text-white mb-1">ভিডিও প্লে করতে সমস্যা হচ্ছে</p>
-                          <p className="text-xs text-gray-300 mb-3">দয়া করে ইন্টারনেট কানেকশন চেক করুন</p>
-                          <button
-                            onClick={() => {
-                              setHasPlaybackError(false);
-                              if (videoRef.current) {
-                                videoRef.current.load();
-                                videoRef.current.play().catch(() => {});
-                              }
-                            }}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow cursor-pointer transition active:scale-95"
-                          >
-                            পুনরায় চেষ্টা করুন (Retry)
-                          </button>
+                          <p className="text-sm font-bold text-white mb-1">
+                            {!isOnline && !localBlobUrl ? "আপনি বর্তমানে অফলাইনে আছেন" : "ভিডিও প্লে করতে সমস্যা হচ্ছে"}
+                          </p>
+                          <p className="text-xs text-gray-300 mb-3 max-w-xs">
+                            {!isOnline && !localBlobUrl
+                              ? "এই ভিডিওটি আগে অফলাইনে ডাউনলোড করা হয়নি। অফলাইনে দেখতে আপনার সেভ করা ভিডিওগুলো নির্বাচন করুন।"
+                              : "দয়া করে ইন্টারনেট কানেকশন চেক করুন বা পুনরায় চেষ্টা করুন"}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            {downloadedIds.length > 0 && !localBlobUrl && (
+                              <button
+                                onClick={() => {
+                                  setHasPlaybackError(false);
+                                  setActiveTab("downloaded");
+                                  const downloadedVideos = videos.filter((v) => downloadedIds.includes(v.id));
+                                  if (downloadedVideos.length > 0) {
+                                    selectVideo(downloadedVideos[0]);
+                                  }
+                                }}
+                                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow cursor-pointer transition active:scale-95 flex items-center gap-1.5"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>ডাউনলোড করা ভিডিও চালান</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                setHasPlaybackError(false);
+                                if (videoRef.current) {
+                                  videoRef.current.load();
+                                  videoRef.current.play().catch(() => {});
+                                }
+                              }}
+                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow cursor-pointer transition active:scale-95"
+                            >
+                              পুনরায় চেষ্টা করুন (Retry)
+                            </button>
+                          </div>
                         </div>
                       )}
                     </>
@@ -781,18 +1031,47 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
                 </div>
               </div>
 
-              {/* Golden "Add to Favorites" Button */}
-              <button
-                onClick={() => toggleFavorite(currentVideo.id)}
-                className={`px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap border shadow-sm cursor-pointer ${
-                  isCurrentFavorite
-                    ? "bg-amber-500/20 text-amber-300 border-amber-400/50 shadow-amber-900/20"
-                    : "bg-amber-500/10 text-amber-300 border-amber-400/30 hover:bg-amber-500/20"
-                }`}
-              >
-                <Heart className={`w-3.5 h-3.5 ${isCurrentFavorite ? "fill-current text-amber-400" : ""}`} />
-                <span>{isCurrentFavorite ? "ফেভারিট যুক্ত" : "Add to Favorites"}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Offline Download / Delete Button */}
+                {downloadedIds.includes(currentVideo.id) ? (
+                  <button
+                    onClick={(e) => handleDeleteOfflineVideo(currentVideo, e)}
+                    title="অফলাইন মেমোরিতে সেভ আছে (মুছতে ক্লিক করুন)"
+                    className="px-3 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap border shadow-sm cursor-pointer bg-emerald-500/15 text-emerald-300 border-emerald-400/40 hover:bg-rose-500/15 hover:text-rose-300 hover:border-rose-400/40 group"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 group-hover:hidden text-emerald-400" />
+                    <Trash2 className="w-3.5 h-3.5 hidden group-hover:inline text-rose-400" />
+                    <span className="group-hover:hidden">অফলাইনে সংরক্ষিত</span>
+                    <span className="hidden group-hover:inline">অফলাইন মুছুন</span>
+                  </button>
+                ) : downloadProgressMap[currentVideo.id]?.status === "downloading" ? (
+                  <div className="px-3 py-2 rounded-full text-xs font-semibold flex items-center gap-2 bg-cyan-500/20 text-cyan-300 border border-cyan-400/40">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                    <span>ডাউনলোড {downloadProgressMap[currentVideo.id].progress}%</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={(e) => handleDownloadVideo(currentVideo, e)}
+                    className="px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap border shadow-sm cursor-pointer bg-cyan-500/10 text-cyan-300 border-cyan-400/30 hover:bg-cyan-500/20 active:scale-95"
+                  >
+                    <HardDriveDownload className="w-3.5 h-3.5" />
+                    <span>অফলাইনে সেভ করুন</span>
+                  </button>
+                )}
+
+                {/* Golden "Add to Favorites" Button */}
+                <button
+                  onClick={() => toggleFavorite(currentVideo.id)}
+                  className={`px-3.5 py-2 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all whitespace-nowrap border shadow-sm cursor-pointer ${
+                    isCurrentFavorite
+                      ? "bg-amber-500/20 text-amber-300 border-amber-400/50 shadow-amber-900/20"
+                      : "bg-amber-500/10 text-amber-300 border-amber-400/30 hover:bg-amber-500/20"
+                  }`}
+                >
+                  <Heart className={`w-3.5 h-3.5 ${isCurrentFavorite ? "fill-current text-amber-400" : ""}`} />
+                  <span>{isCurrentFavorite ? "ফেভারিট যুক্ত" : "Add to Favorites"}</span>
+                </button>
+              </div>
             </div>
 
             {/* Tag Chips */}
@@ -823,23 +1102,81 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
               </div>
             )}
 
-            {/* 4. RELATED VIDEOS SECTION (RENDERED FROM FIRESTORE) */}
-            {videos.length > 1 && (
-              <div className="pt-2">
-                <div className="flex items-center justify-between mb-3 px-1">
-                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                    <Play className="w-4 h-4 fill-current text-cyan-400" />
-                    Related Videos (সম্পর্কিত ভিডিও)
-                  </h3>
-                  <span className="text-xs text-emerald-400 font-semibold">
-                    মোট {videos.length}টি ভিডিও
-                  </span>
-                </div>
+            {/* 4. RELATED VIDEOS & OFFLINE TABS */}
+            <div className="pt-2">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  <Play className="w-4 h-4 fill-current text-cyan-400" />
+                  ভিডিও তালিকা (Video Tilawat)
+                </h3>
+                <span className="text-xs text-emerald-400 font-semibold">
+                  মোট {filteredVideos.length}টি ভিডিও
+                </span>
+              </div>
 
-                {/* Video Cards Grid */}
+              {/* Tabs: All, Offline Downloaded, Favorites */}
+              <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar">
+                <button
+                  onClick={() => setActiveTab("all")}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === "all"
+                      ? "bg-cyan-500 text-black shadow-md shadow-cyan-500/30"
+                      : "bg-white/5 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  সকল ভিডিও ({videos.length})
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("downloaded")}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                    activeTab === "downloaded"
+                      ? "bg-emerald-500 text-black shadow-md shadow-emerald-500/30"
+                      : "bg-white/5 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>অফলাইন সেভ করা ({downloadedIds.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("favorites")}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                    activeTab === "favorites"
+                      ? "bg-rose-500 text-white shadow-md shadow-rose-500/30"
+                      : "bg-white/5 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  <Heart className="w-3.5 h-3.5 fill-current" />
+                  <span>পছন্দের তালিকা</span>
+                </button>
+              </div>
+
+              {/* Empty state for downloaded tab */}
+              {activeTab === "downloaded" && filteredVideos.length === 0 && (
+                <div className="py-10 px-4 text-center rounded-2xl bg-[#071321] border border-white/5 my-2">
+                  <HardDriveDownload className="w-12 h-12 text-cyan-400/60 mx-auto mb-3" />
+                  <h4 className="text-sm font-bold text-white mb-1">কোনো অফলাইন ভিডিও পাওয়া যায়নি</h4>
+                  <p className="text-xs text-gray-400 max-w-sm mx-auto mb-4">
+                    ইন্টারনেট চালু থাকা অবস্থায় যেকোনো ভিডিওর নিচে "অফলাইনে সেভ করুন" বাটনে চাপ দিয়ে ফোনে ডাউনলোড করে রাখুন। এরপর ইন্টারনেট ছাড়াই সরাসরি দেখতে পারবেন।
+                  </p>
+                  <button
+                    onClick={() => setActiveTab("all")}
+                    className="px-4 py-2 bg-cyan-500 text-black text-xs font-bold rounded-xl shadow cursor-pointer active:scale-95"
+                  >
+                    সকল ভিডিও দেখুন
+                  </button>
+                </div>
+              )}
+
+              {/* Video Cards Grid */}
+              {filteredVideos.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {videos.map((item) => {
-                    const isItemActive = item.id === currentVideo.id;
+                  {filteredVideos.map((item) => {
+                    const isItemActive = item.id === currentVideo?.id;
+                    const isItemDownloaded = downloadedIds.includes(item.id);
+                    const isDownloading = downloadProgressMap[item.id]?.status === "downloading";
+
                     return (
                       <div
                         key={item.id}
@@ -860,6 +1197,14 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
                           />
                           <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors" />
                           
+                          {/* Offline Downloaded Badge on Thumbnail */}
+                          {isItemDownloaded && (
+                            <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-emerald-600/90 backdrop-blur-xs text-[9px] font-bold text-white flex items-center gap-1 shadow">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>অফলাইন</span>
+                            </div>
+                          )}
+
                           {/* Play icon overlay */}
                           <div className="absolute inset-0 flex items-center justify-center">
                             <div className="w-8 h-8 rounded-full bg-black/60 backdrop-blur-xs text-white flex items-center justify-center group-hover:scale-110 group-hover:bg-cyan-500 group-hover:text-black transition-all">
@@ -881,17 +1226,43 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
                           <p className="text-[11px] text-gray-400 line-clamp-1">
                             {item.reciterNameBn || item.reciterName}
                           </p>
-                          <div className="text-[10px] text-gray-500 flex items-center gap-1 font-mono">
-                            <span>👁</span>
-                            <span>{item.views || "100K"}</span>
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="text-[10px] text-gray-500 flex items-center gap-1 font-mono">
+                              <span>👁</span>
+                              <span>{item.views || "100K"}</span>
+                            </div>
+
+                            {isItemDownloaded ? (
+                              <button
+                                onClick={(e) => handleDeleteOfflineVideo(item, e)}
+                                title="অফলাইন থেকে মুছুন"
+                                className="text-[10px] text-emerald-400 hover:text-rose-400 font-bold flex items-center gap-0.5 transition-colors cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>সেভড</span>
+                              </button>
+                            ) : isDownloading ? (
+                              <span className="text-[10px] text-cyan-400 font-bold flex items-center gap-0.5">
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span>{downloadProgressMap[item.id]?.progress}%</span>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={(e) => handleDownloadVideo(item, e)}
+                                title="অফলাইনে সেভ করুন"
+                                className="w-6 h-6 rounded-md bg-white/5 hover:bg-cyan-500/20 text-gray-400 hover:text-cyan-300 flex items-center justify-center transition cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
           </div>
 
