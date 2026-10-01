@@ -9,7 +9,7 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firestore with auto-detect long polling to gracefully handle network switches and sandbox constraints.
 // We also use ignoreUndefinedProperties to prevent crashes when saving partially filled forms.
 export const db = initializeFirestore(app, { 
-  experimentalAutoDetectLongPolling: true,
+  experimentalForceLongPolling: true,
   ignoreUndefinedProperties: true
 }, firebaseConfig.firestoreDatabaseId);
 

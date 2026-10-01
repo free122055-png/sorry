@@ -111,13 +111,6 @@ const FEATURE_SERVICES: FeatureCardItem[] = [
 ];
 
 // Define a mapping for frame colors based on category ID or type
-const getFrameColor = (iconBg: string) => {
-  if (iconBg.includes("amber") || iconBg.includes("orange")) return "border-emerald-600";
-  if (iconBg.includes("sky") || iconBg.includes("blue")) return "border-emerald-600";
-  if (iconBg.includes("emerald") || iconBg.includes("green")) return "border-emerald-600";
-  return "border-emerald-600";
-};
-
 export const Home: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
@@ -195,53 +188,53 @@ export const Home: React.FC = () => {
             </div>
 
             {/* Market Categories (4 items) - Circular Premium Style */}
-            <div className="grid grid-cols-4 gap-x-2 sm:gap-x-3 gap-y-5 px-0 justify-items-center">
+            <div className="grid grid-cols-4 gap-3 sm:gap-4 px-0">
 
               {MARKET_CATEGORIES.map((cat) => (
                 <motion.div
                   key={cat.id}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => navigate(`/category/${cat.id}`)}
-                  className="flex flex-col items-center gap-1.5 cursor-pointer group"
+                  className="cursor-pointer group"
                 >
-                  <div className={`w-[78px] h-[82px] sm:w-[90px] sm:h-[92px] rounded-2xl bg-white border ${getFrameColor(cat.iconBg)} flex flex-col items-center justify-center p-1.5 transition-all shadow-xs`}>
-                      <div className={`w-[44px] h-[44px] rounded-full ${cat.iconBg} flex items-center justify-center mb-1 overflow-hidden shadow-xs`}>
+                  <div className="w-full aspect-square bg-white rounded-2xl border border-gray-100 shadow-[0_4px_15px_rgba(0,0,0,0.03)] flex flex-col items-center justify-center p-1.5 transition-all">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white flex items-center justify-center mb-1.5 overflow-hidden shadow-[0_4px_12px_rgba(0,0,0,0.06)] border border-gray-50">
                         {customIcons[cat.id] ? (
-                          <img src={customIcons[cat.id]} alt={t(cat.key)} className="w-full h-full object-cover" />
+                          <img src={customIcons[cat.id]} alt={t(cat.key)} className="w-12 h-12 sm:w-14 sm:h-14 object-contain" />
                         ) : (
-                          React.cloneElement(cat.icon as React.ReactElement, { className: "w-6 h-6 text-white" })
+                          React.cloneElement(cat.icon as React.ReactElement, { className: `w-10 h-10 ${cat.iconBg.replace('bg-', 'text-')}` })
                         )}
                       </div>
-                      <span className="text-[10px] sm:text-[11px] font-bold text-gray-800 text-center leading-tight truncate w-full">{t(cat.key)}</span>
+                      <span className="text-[9px] sm:text-[10px] font-black text-gray-900 text-center leading-tight line-clamp-2 px-1">{t(cat.key)}</span>
                   </div>
                 </motion.div>
               ))}
             </div>
 
             {/* Section: Feature Services - Circular Premium Style */}
-            <div className="mt-8 mb-4">
+            <div className="mt-10 mb-4">
               <div>
                 <h3 className="text-[19px] font-black text-[#0f172a] tracking-tight">{t("otherServices")}</h3>
               </div>
             </div>
             
-            <div className="grid grid-cols-4 gap-x-2 sm:gap-x-3 gap-y-5 px-0 justify-items-center">
+            <div className="grid grid-cols-4 gap-3 sm:gap-4 px-0">
               {FEATURE_SERVICES.map((item) => (
                 <motion.div
                   key={item.id}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => navigate(item.path)}
-                  className="flex flex-col items-center gap-1.5 cursor-pointer group"
+                  className="cursor-pointer group"
                 >
-                  <div className={`w-[78px] h-[82px] sm:w-[90px] sm:h-[92px] rounded-2xl bg-white border ${getFrameColor(item.iconBg)} flex flex-col items-center justify-center p-1.5 transition-all shadow-xs`}>
-                      <div className={`w-[44px] h-[44px] rounded-full ${item.iconBg} flex items-center justify-center mb-1 overflow-hidden shadow-xs`}>
+                  <div className="w-full aspect-square bg-white rounded-2xl border border-gray-100 shadow-[0_4px_15px_rgba(0,0,0,0.03)] flex flex-col items-center justify-center p-1.5 transition-all">
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-white flex items-center justify-center mb-1.5 overflow-hidden shadow-[0_4px_12px_rgba(0,0,0,0.06)] border border-gray-50">
                         {customIcons[item.id] ? (
-                          <img src={customIcons[item.id]} alt={t(item.key)} className="w-full h-full object-cover" />
+                          <img src={customIcons[item.id]} alt={t(item.key)} className="w-12 h-12 sm:w-14 sm:h-14 object-contain" />
                         ) : (
-                          React.cloneElement(item.icon as React.ReactElement, { className: "w-6 h-6 text-white" })
+                          React.cloneElement(item.icon as React.ReactElement, { className: `w-10 h-10 ${item.iconBg.replace('bg-', 'text-')}` })
                         )}
                       </div>
-                      <span className="text-[10px] sm:text-[11px] font-bold text-gray-800 text-center leading-tight truncate w-full">{t(item.key)}</span>
+                      <span className="text-[9px] sm:text-[10px] font-black text-gray-900 text-center leading-tight line-clamp-2 px-1">{t(item.key)}</span>
                   </div>
                 </motion.div>
               ))}
