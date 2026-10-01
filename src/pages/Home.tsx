@@ -107,6 +107,13 @@ const FEATURE_SERVICES: FeatureCardItem[] = [
     icon: <Globe className="w-5 h-5 text-white" />,
     iconBg: "bg-[#0a3d2e]",
     path: "/gov-services"
+  },
+  {
+    id: "live_chat",
+    key: "liveChat",
+    icon: <Bell className="w-5 h-5 text-white" />,
+    iconBg: "bg-[#25D366]",
+    path: "/chat"
   }
 ];
 
@@ -170,8 +177,8 @@ export const Home: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f1f3f4] text-black flex flex-col font-sans select-none pb-20">
       <SEO 
-        title="All Mayadin Fashion - Premium Shopping & Design" 
-        description="Shop premium fashion, groceries and create professional designs with All Mayadin Fashion." 
+        title="BINISTA - Live Chat, Community & Digital Services" 
+        description="Connect with friends, chat in real-time, and explore premium digital services with BINISTA." 
       />
 
       <main className="flex-1 overflow-y-auto w-full pt-32 sm:pt-36">

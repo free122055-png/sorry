@@ -116,7 +116,15 @@ const translations: Translations = {
   gpsPermissionDesc: { bn: "প্লে-স্টোর অ্যাপে নিখুঁত রিয়েল-টাইম লোকেশন দেখার জন্য আপনার মোবাইলের GPS Location Permission অন থাকা আবশ্যক।", en: "GPS Location Permission must be ON for accurate real-time location in the Play Store app." },
   turnOnPermission: { bn: "📍 অনুমতি চালু ও নিশ্চিত করুন", en: "📍 Turn on & Confirm Permission" },
   downloadApp: { bn: "অফিসিয়াল অ্যাপ ডাউনলোড করুন", en: "Download Official App" },
-  playStore: { bn: "গুগল প্লে-স্টোর", en: "Google Play Store" }
+  playStore: { bn: "গুগল প্লে-স্টোর", en: "Google Play Store" },
+  liveChat: { bn: "লাইভ চ্যাট", en: "Live Chat" },
+  chatList: { bn: "চ্যাট তালিকা", en: "Chat List" },
+  startNewChat: { bn: "নতুন চ্যাট শুরু করুন", en: "Start New Chat" },
+  typeMessage: { bn: "মেসেজ লিখুন...", en: "Type message..." },
+  sendMessage: { bn: "সেন্ড করুন", en: "Send Message" },
+  noMessages: { bn: "এখনো কোনো মেসেজ নেই", en: "No messages yet" },
+  online: { bn: "অনলাইন", en: "Online" },
+  offline: { bn: "অফলাইন", en: "Offline" }
 };
 
 interface LanguageContextType {

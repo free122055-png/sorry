@@ -1,15 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { User, Package, MapPin, Heart, Bell, Shield, LogOut, ChevronRight, Settings, Edit3, X, Check, Camera, Phone, FileText, LockIcon, Trash2, AlertTriangle } from "lucide-react";
+import { User, Package, MapPin, Heart, Bell, Shield, LogOut, ChevronRight, Settings, Edit3, X, Check, Camera, Phone, FileText, LockIcon, Trash2, AlertTriangle, Bot } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useNotificationContext } from "../context/NotificationContext";
 import { useLanguage } from "../context/LanguageContext";
 import { auth, db } from "../lib/firebase";
 import { signOut, updateProfile as updateFirebaseProfile } from "firebase/auth";
-import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, collection, query, where, getDocs, limit, onSnapshot } from "firebase/firestore";
 import { handleFirestoreError, OperationType } from "../lib/firebase";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
+import { PersonalAiAgentModal } from "../components/chat/PersonalAiAgentModal";
 
 export const Account: React.FC = () => {
   const { user, profile, loading, refreshProfile } = useAuth();
@@ -24,6 +25,25 @@ export const Account: React.FC = () => {
   const [photoURL, setPhotoURL] = useState("");
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [allUsers, setAllUsers] = useState<Array<{ id: string; displayName: string; photoURL?: string }>>([]);
+
+  // Fetch users for AI scheduling contact list
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, "users"), limit(100));
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs
+        .map(d => ({
+          id: d.id,
+          displayName: d.data().displayName || d.data().name || "User",
+          photoURL: d.data().photoURL || ""
+        }))
+        .filter(u => u.id !== user.uid);
+      setAllUsers(list);
+    }, (err) => console.warn(err));
+    return () => unsub();
+  }, [user]);
 
   // Sync state when profile loads or editing starts
   React.useEffect(() => {
@@ -76,6 +96,7 @@ export const Account: React.FC = () => {
   };
 
   const accountMenu = [
+    { icon: Bot, label: "পার্সোনাল AI এজেন্ট ও মেসেজ শিডিউল", action: () => setShowAiModal(true) },
     { icon: Package, label: t("myOrders"), path: "/orders" },
     { icon: Heart, label: t("wishlist"), path: "/wishlist" },
     { icon: MapPin, label: t("savedAddresses"), path: "/addresses" },
@@ -393,6 +414,13 @@ export const Account: React.FC = () => {
       <DeleteAccountModal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
+      />
+
+      {/* Personal AI Agent Modal */}
+      <PersonalAiAgentModal
+        isOpen={showAiModal}
+        onClose={() => setShowAiModal(false)}
+        availableUsers={allUsers}
       />
     </div>
   );

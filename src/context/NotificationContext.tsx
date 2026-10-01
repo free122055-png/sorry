@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import { db } from "../lib/firebase";
 import { collection, query, where, onSnapshot, doc, updateDoc, writeBatch } from "firebase/firestore";
 import { useAuth } from "./AuthContext";
+import { WhatsAppChatBanner, ChatToast } from "../components/WhatsAppChatBanner";
+import { playChatNotificationSound, vibrateDevice } from "../lib/sound";
 
 export interface NotificationItem {
   id: string;
@@ -11,7 +13,7 @@ export interface NotificationItem {
   imageUrl?: string;
   read: boolean;
   createdAt: any;
-  type?: 'order' | 'offer' | 'system' | 'payment' | 'push';
+  type?: 'order' | 'offer' | 'system' | 'payment' | 'push' | 'chat';
   link?: string;
   userId?: string;
   data?: any;
@@ -31,6 +33,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeChatToast, setActiveChatToast] = useState<ChatToast | null>(null);
+  const knownIdsRef = useRef<Set<string>>(new Set());
+  const isInitialLoadRef = useRef<boolean>(true);
 
   // Local storage helper for broadcast notifications read status
   const getReadKey = () => `read_notifs_${user?.uid || 'guest'}`;
@@ -125,7 +130,53 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       try {
         const qUser = query(collection(db, "notifications"), where("userId", "==", user.uid));
         unSubUser = onSnapshot(qUser, (snap) => {
-          userDocs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as NotificationItem[];
+          const incomingDocs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as NotificationItem[];
+          
+          if (!isInitialLoadRef.current) {
+            // Check for newly arrived chat messages
+            for (const item of incomingDocs) {
+              if (!knownIdsRef.current.has(item.id) && !item.read) {
+                const isChat = item.type === 'chat' || item.data?.type === 'chat';
+                if (isChat) {
+                  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+                  const targetRoomId = item.data?.roomId;
+
+                  // Play WhatsApp chime and vibrate
+                  playChatNotificationSound();
+                  vibrateDevice([200, 100, 200]);
+
+                  // Trigger system notification if permitted
+                  if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+                    try {
+                      new Notification(item.title, {
+                        body: item.message || item.body || "",
+                        icon: "/app_icon.png",
+                        badge: "/app_icon.png"
+                      });
+                    } catch (e) {}
+                  }
+
+                  // If not actively viewing that chat room, show WhatsApp dropdown banner
+                  if (!targetRoomId || !currentPath.includes(targetRoomId)) {
+                    setActiveChatToast({
+                      id: item.id,
+                      senderName: item.title,
+                      senderPhoto: item.data?.senderPhoto,
+                      message: item.message || item.body || "",
+                      roomId: targetRoomId,
+                      url: item.data?.url || (targetRoomId ? `/chat/${targetRoomId}` : '/chat')
+                    });
+                  }
+                }
+              }
+            }
+          }
+
+          // Register known IDs
+          incomingDocs.forEach(d => knownIdsRef.current.add(d.id));
+          isInitialLoadRef.current = false;
+
+          userDocs = incomingDocs;
           mergeAndSet();
         }, (err) => {
           console.warn("User notifications fetch issue:", err);
@@ -184,6 +235,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   return (
     <NotificationContext.Provider value={{ notifications, unreadCount, loading, markAsRead, markAllAsRead }}>
       {children}
+      <WhatsAppChatBanner toast={activeChatToast} onClose={() => setActiveChatToast(null)} />
     </NotificationContext.Provider>
   );
 };

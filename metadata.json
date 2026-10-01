@@ -1,6 +1,6 @@
 {
-  "name": "Al Mayadin Bazar",
-  "description": "Al Mayadin Bazar - Official e-commerce mobile app and marketplace for fresh foods, groceries, fashion, electronics, and daily essentials.",
+  "name": "BINISTA",
+  "description": "BINISTA - Official Real-Time Live Chat, Reels & Social Community Platform.",
   "requestFramePermissions": ["camera", "geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

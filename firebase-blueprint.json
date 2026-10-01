@@ -421,6 +421,83 @@
         "createdAt": { "type": "number" }
       },
       "required": ["categoryId", "name", "url"]
+    },
+    "ChatRoom": {
+      "title": "Chat Room",
+      "description": "Conversation between users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participants": { "type": "array" },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "number" },
+        "unreadCounts": { "type": "object" },
+        "users": { "type": "object" }
+      }
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "Individual message in a chat room",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "read": { "type": "boolean" },
+        "sentBy": { "type": "string" },
+        "isScheduled": { "type": "boolean" },
+        "isAutoReply": { "type": "boolean" }
+      }
+    },
+    "UserAiAgent": {
+      "title": "User Personal AI Agent",
+      "description": "Personal AI Agent configuration and rules for a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "agentName": { "type": "string" },
+        "statusMode": { "type": "string" },
+        "persona": { "type": "string" },
+        "customInstructions": { "type": "string" },
+        "autoReplyOffline": { "type": "boolean" },
+        "allowScheduledMessages": { "type": "boolean" },
+        "sensitiveActionGuard": { "type": "boolean" },
+        "sleepSchedule": { "type": "object" },
+        "updatedAt": { "type": "number" }
+      }
+    },
+    "ScheduledMessage": {
+      "title": "Scheduled Message",
+      "description": "Scheduled messages queued to be sent automatically by the user's AI Agent",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "targetUserId": { "type": "string" },
+        "roomId": { "type": "string" },
+        "message": { "type": "string" },
+        "scheduledAt": { "type": "number" },
+        "status": { "type": "string" },
+        "sentAt": { "type": "number" },
+        "createdAt": { "type": "number" }
+      }
+    },
+    "AiAgentLog": {
+      "title": "AI Agent Log",
+      "description": "Audit history of automated actions performed by the personal AI Agent",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "targetUserId": { "type": "string" },
+        "targetUserName": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "number" }
+      }
     }
   },
   "firestore": {
@@ -519,6 +596,26 @@
     "gov_websites/{websiteId}": {
       "schema": "GovWebsite",
       "description": "Official government website links"
+    },
+    "chat_rooms/{roomId}": {
+      "schema": "ChatRoom",
+      "description": "Conversation rooms between users"
+    },
+    "chat_rooms/{roomId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Messages within a chat room"
+    },
+    "user_ai_agents/{userId}": {
+      "schema": "UserAiAgent",
+      "description": "Personal AI agent configurations"
+    },
+    "scheduled_messages/{messageId}": {
+      "schema": "ScheduledMessage",
+      "description": "Scheduled messages queued to be sent automatically"
+    },
+    "ai_agent_logs/{logId}": {
+      "schema": "AiAgentLog",
+      "description": "Activity history log of personal AI Agent actions"
     }
   }
 }

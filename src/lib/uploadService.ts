@@ -1,8 +1,9 @@
 import { getApiUrl } from "./api";
+import { saveVideoToDB } from "./videoStorage";
 
 /**
- * High-speed Public CDN Upload Service
- * Generates globally accessible HTTPS image URLs for OneSignal push notifications and social cards
+ * High-speed Public CDN & Server Upload Service
+ * Generates permanent URLs for videos and images to ensure zero-loss storage in Firestore.
  */
 
 export const PERMANENT_IMGBB_API_KEY = typeof process !== "undefined" && process.env?.IMGBB_API_KEY ? process.env.IMGBB_API_KEY : atob("NTJlY2Y5ZWI0NGYzMmQyYTg4ZDIxMGNhMzM5OWMwNTQ=");
@@ -48,7 +49,7 @@ export const uploadImage = async (base64Image: string, apiKey?: string): Promise
   }
 
   try {
-    // 1. First Tier: Direct Public CDN Upload (FreeImage.host)
+    // 1. Direct Public CDN Upload (FreeImage.host)
     try {
       const fd = new FormData();
       fd.append("key", "6d207e02198a847aa98d0a2a901485a5");
@@ -72,7 +73,7 @@ export const uploadImage = async (base64Image: string, apiKey?: string): Promise
       console.warn("[Upload] Client CDN direct upload notice:", cdnErr);
     }
 
-    // 2. Second Tier: Server Upload Endpoint (Proxies upload & saves fallback)
+    // 2. Server Upload Endpoint
     try {
       const serverRes = await fetch(getApiUrl("/api/upload/image"), {
         method: "POST",
@@ -96,31 +97,56 @@ export const uploadImage = async (base64Image: string, apiKey?: string): Promise
       console.warn("[Upload] Server storage route notice:", serverErr);
     }
 
-    // 3. Third Tier: Custom ImgBB key if provided by user
-    const keyToUse = (apiKey && apiKey.trim() !== "") ? apiKey.trim() : "";
-    if (keyToUse && keyToUse !== PERMANENT_IMGBB_API_KEY) {
-      try {
-        const formData = new FormData();
-        formData.append("image", cleanBase64);
-
-        const response = await fetch(`https://api.imgbb.com/1/upload?key=${keyToUse}`, {
-          method: "POST",
-          body: formData,
-        });
-
-        const data = await response.json();
-        if (data.success && data.data?.url) {
-          return data.data.url;
-        }
-      } catch (imgbbErr) {
-        console.warn("[Upload] ImgBB client upload notice:", imgbbErr);
-      }
-    }
-
-    // Return the base64 string (server will auto-convert to public URL on send)
     return base64Image;
   } catch (error: any) {
     console.warn("[Upload] Process completed with fallback:", error?.message || error);
     return base64Image;
   }
+};
+
+/**
+ * Upload Video to Server & IndexedDB
+ * Converts large base64 video files into a permanent server URL so Firestore document size is never exceeded!
+ */
+export const uploadVideo = async (videoBase64: string, filename?: string): Promise<string> => {
+  if (!videoBase64) return "";
+
+  // If already a valid public HTTPS URL, return immediately
+  if ((videoBase64.startsWith("http://") || videoBase64.startsWith("https://")) && 
+      !videoBase64.includes("localhost") && !videoBase64.includes("127.0.0.1")) {
+    return videoBase64;
+  }
+
+  const videoId = `vid_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  
+  // 1. Always save in IndexedDB for 0ms offline instant playback
+  try {
+    await saveVideoToDB(videoId, videoBase64);
+  } catch (e) {
+    console.warn("[VideoStorage] IndexedDB save notice:", e);
+  }
+
+  // 2. Upload to server to get a compact public HTTPS URL
+  try {
+    const res = await fetch(getApiUrl("/api/upload/video"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        video: videoBase64,
+        filename: filename || `${videoId}.mp4`
+      })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.url) {
+        console.log("[VideoUpload] Permanent server video URL generated:", data.url);
+        return data.url;
+      }
+    }
+  } catch (err) {
+    console.warn("[VideoUpload] Server upload notice:", err);
+  }
+
+  return videoBase64;
 };

@@ -11,6 +11,7 @@ import { DeepLinkHandler } from "./components/DeepLinkHandler";
 import { SplashScreen } from "./components/SplashScreen";
 import { EmailPromptModal } from "./components/EmailPromptModal";
 import { FloatingOrderBubble } from "./components/FloatingOrderBubble";
+import { GlobalCallListener } from "./components/chat/GlobalCallListener";
 
 import { NotificationProvider } from "./context/NotificationContext";
 import { QuranProvider } from "./context/QuranContext";
@@ -35,6 +36,8 @@ import { GovServices } from "./pages/GovServices";
 import { GovCategoryDetails } from "./pages/GovCategoryDetails";
 import { MatrimonialPage } from "./pages/MatrimonialPage";
 import { TelecomPage } from "./pages/TelecomPage";
+import { ChatList } from "./pages/ChatList";
+import { ChatRoom } from "./pages/ChatRoom";
 
 // Robust dynamic import wrapper with automatic retry and reload recovery on dev server restart
 function safeLazy<T extends React.ComponentType<any>>(
@@ -93,7 +96,7 @@ const LoadingFallback = () => (
         🌙
       </div>
     </div>
-    <span className="text-xs font-black text-gray-700 tracking-wide">AL MAYADIN BAZAR</span>
+    <span className="text-xs font-black text-gray-700 tracking-wide">BINISTA</span>
     <span className="text-[10px] font-semibold text-emerald-600 mt-0.5 animate-pulse">অনুগ্ৰহ করে অপেক্ষা করুন...</span>
   </div>
 );
@@ -167,6 +170,7 @@ function EmailPromptHandler() {
 function AppLayout() {
   const location = useLocation();
   const isHome = location.pathname === "/";
+  const isChat = location.pathname.startsWith("/chat") || location.pathname === "/";
   const isTilawat = location.pathname === "/islamic-tilawat" || location.pathname === "/tilawat";
   const isPixelEditor = location.pathname === "/pixel-editing-tools" || 
                         location.pathname === "/pixel-tools" || 
@@ -177,15 +181,16 @@ function AppLayout() {
 
   return (
     <div className={`w-full min-h-screen overflow-x-hidden overflow-y-auto ${
+      isChat ? "bg-[#0b1017] text-slate-100 pb-0" :
       isTilawat || isPixelEditor || isStandaloneAdmin || isLogin ? "bg-[#002A1A] pb-0" : "bg-[#f8f9fa] pb-24 md:pb-0"
     }`}>
       <SplashScreen />
       <EmailPromptHandler />
-      {!isPixelEditor && !isStandaloneAdmin && !isLogin && <Header />}
-      <main className={isTilawat || isPixelEditor || isStandaloneAdmin || isLogin ? "w-full min-h-screen" : "max-w-7xl mx-auto w-full"}>
+      {!isChat && !isPixelEditor && !isStandaloneAdmin && !isLogin && <Header />}
+      <main className={isChat || isTilawat || isPixelEditor || isStandaloneAdmin || isLogin ? "w-full min-h-screen" : "max-w-7xl mx-auto w-full"}>
         <Suspense fallback={<LoadingFallback />}>
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/" element={<ProtectedRoute><ChatList /></ProtectedRoute>} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/category/:categoryId" element={<ProductListing />} />
             
@@ -258,16 +263,19 @@ function AppLayout() {
             <Route path="/gov-services" element={<GovServices />} />
             <Route path="/gov-services/category/:categoryId" element={<GovCategoryDetails />} />
             <Route path="/live-location" element={<ProtectedRoute><LiveLocationSharing /></ProtectedRoute>} />
+            <Route path="/chat" element={<ProtectedRoute><ChatList /></ProtectedRoute>} />
+            <Route path="/chat/:roomId" element={<ProtectedRoute><ChatRoom /></ProtectedRoute>} />
             <Route path="/caption-ghor" element={<CaptionGhorPage />} />
             <Route path="/banner-offer/:bannerId" element={<BannerOfferPage />} />
             <Route path="/offer/:bannerId" element={<BannerOfferPage />} />
           </Routes>
         </Suspense>
       </main>
-      {!isPixelEditor && !isStandaloneAdmin && !isLogin && <BottomNav />}
-      {!isPixelEditor && !isStandaloneAdmin && !isLogin && <FloatingOrderBubble />}
+      {!isChat && !isPixelEditor && !isStandaloneAdmin && !isLogin && <BottomNav />}
+      {!isChat && !isPixelEditor && !isStandaloneAdmin && !isLogin && <FloatingOrderBubble />}
       <DeepLinkHandler />
       <AuthModal />
+      <GlobalCallListener />
     </div>
   );
 }

@@ -15,6 +15,8 @@ import { SEO } from "../components/SEO";
 import { getApiUrl } from "../lib/api";
 import { DeleteAccountModal } from "../components/DeleteAccountModal";
 
+import { uploadImageFile } from "../lib/uploadService";
+
 export const AccountSettings: React.FC = () => {
   const navigate = useNavigate();
   const { user, profile, refreshProfile } = useAuth();
@@ -86,14 +88,17 @@ export const AccountSettings: React.FC = () => {
     }
   }, [user, profile]);
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoURL(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const publicUrl = await uploadImageFile(file);
+        if (publicUrl) {
+          setPhotoURL(publicUrl);
+        }
+      } catch (err) {
+        console.error("Photo upload error:", err);
+      }
     }
   };
 

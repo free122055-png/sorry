@@ -8,7 +8,7 @@ interface SEOProps {
   image?: string;
 }
 
-export const SEO: React.FC<SEOProps> = ({ title, description, type = "website", name = "All Mayadin Bazar", image }) => {
+export const SEO: React.FC<SEOProps> = ({ title, description, type = "website", name = "BINISTA", image }) => {
   React.useEffect(() => {
     document.title = `${title} | ${name}`;
     const metaDesc = document.querySelector('meta[name="description"]');

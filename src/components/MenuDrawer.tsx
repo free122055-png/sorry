@@ -281,6 +281,25 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                     <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-pink-700 group-hover:translate-x-0.5 transition-all" />
                   </button>
 
+                  {/* ক্লিপস ও সোশ্যাল চ্যাট */}
+                  <button
+                    onClick={() => handleNavigate("/chat")}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-emerald-50/50 text-gray-800 font-bold transition-colors text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Smartphone className="w-4 h-4 stroke-[2.2]" />
+                      </div>
+                      <span className="group-hover:text-purple-700 transition-colors">ক্লিপস, রিলস ও সোশ্যাল ফিড</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full">
+                        LIVE
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-purple-700 group-hover:translate-x-0.5 transition-all" />
+                    </div>
+                  </button>
+
                   {/* বিবাহের বায়োডাটা */}
                   <button
                     onClick={() => handleNavigate("/matrimonial")}

@@ -249,30 +249,28 @@ export const AuthModal: React.FC = () => {
 
           {/* Logo & Brand Badge */}
           <div className="flex items-center gap-2.5 mb-3">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#ffb703] to-[#e69e00] text-black flex items-center justify-center shadow-md">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>
-                <path d="M3 6h18"/>
-                <path d="M16 10a4 4 0 0 1-8 0"/>
-              </svg>
-            </div>
+            <img 
+              src="/app_icon.png" 
+              alt="BINISTA" 
+              className="w-9 h-9 rounded-xl object-cover ring-2 ring-emerald-500/50 shadow-lg shadow-emerald-500/30" 
+            />
             <div>
-              <span className="text-xs font-black tracking-widest text-[#ffb703] block uppercase">All MAYADIN FASHION</span>
-              <span className="text-base font-black tracking-tight text-white block">নিরাপদ ও প্রিমিয়াম ই-কমার্স</span>
+              <span className="text-xs font-black tracking-widest text-emerald-400 block uppercase">BINISTA</span>
+              <span className="text-base font-black tracking-tight text-white block">রিয়েল-টাইম লাইভ চ্যাট ও কমিউনিটি</span>
             </div>
           </div>
 
           {/* Reason Alert (Why Login is Required) */}
           <div className="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 border border-white/20 flex items-start gap-3 shadow-inner">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#ffb703] to-[#f59e0b] text-black flex items-center justify-center shrink-0 mt-0.5 font-bold shadow-md">
-              <ShoppingBag className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shrink-0 mt-0.5 font-bold shadow-md">
+              <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-xs font-black text-[#ffb703] leading-tight">
-                {authModalMessage || "অর্ডার সম্পন্ন করতে লগইন করুন"}
+              <h3 className="text-xs font-black text-emerald-400 leading-tight">
+                {authModalMessage || "একাউন্টে প্রবেশ করতে লগইন করুন"}
               </h3>
               <p className="text-[11px] text-gray-200 mt-1 leading-snug font-medium">
-                আপনার পছন্দের পণ্যটি অর্ডার ও নিরাপদে ডেলিভারি পেতে আপনার একাউন্টে লগইন করুন অথবা নতুন একাউন্ট খুলুন।
+                আপনার রিয়েল-টাইম চ্যাট, রিলস ও সোশ্যাল কমিউনিটি উপভোগ করতে আপনার একাউন্টে লগইন করুন।
               </p>
             </div>
           </div>

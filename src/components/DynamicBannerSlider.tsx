@@ -19,9 +19,9 @@ const DEFAULT_BANNERS: MainBannerItem[] = [
   {
     id: "default-1",
     type: "image",
-    image: alMayadinHdBanner,
-    title: "Al Mayadin Software",
-    subtitle: "আধুনিক প্রযুক্তিতে ইসলামি জীবনযাত্রা ও ডিজিটাল সেবা"
+    image: "/app_icon.png",
+    title: "BINISTA",
+    subtitle: "আধুনিক ডিজিটাল সেবা ও রিয়েল-টাইম কমিউনিটি"
   },
   {
     id: "default-2",
@@ -33,7 +33,7 @@ const DEFAULT_BANNERS: MainBannerItem[] = [
     id: "default-3",
     type: "image",
     image: "https://images.unsplash.com/photo-1470309864661-68328b2cd0a5?w=1200&q=85",
-    title: "বিশ্বস্ত ডিজিটাল কমার্স"
+    title: "বিশ্বস্ত ডিজিটাল প্ল্যাটফর্ম"
   }
 ];
 

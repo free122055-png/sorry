@@ -4,6 +4,7 @@ import { getApiUrl } from './api';
 import { doc, getDoc, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { uploadImage } from './uploadService';
+import { playChatNotificationSound, vibrateDevice } from './sound';
 
 export const PERMANENT_ONESIGNAL_APP_ID = "d28392ee-2a0f-4f62-ba65-03fb3e0915ab";
 const isBrowser = typeof window !== "undefined";
@@ -101,7 +102,7 @@ class NotificationService {
         await OneSignal.init({
           appId: cleanAppId,
           allowLocalhostAsSecureOrigin: true,
-          serviceWorkerPath: "OneSignalSDKWorker.js",
+          serviceWorkerPath: "/OneSignalSDKWorker.js",
           serviceWorkerParam: { scope: "/" },
           notifyButton: {
             enable: true,
@@ -124,6 +125,28 @@ class NotificationService {
             }
           } as any
         });
+
+        // Automatically sync Push Subscription ID to Firestore when user accepts permission
+        try {
+          if (OneSignal.User?.PushSubscription?.addEventListener) {
+            OneSignal.User.PushSubscription.addEventListener("change", async (event: any) => {
+              const currentUid = typeof window !== "undefined" ? localStorage.getItem("onesignal_current_uid") : null;
+              if (currentUid && event?.current?.id) {
+                console.log("[OneSignal] Push Subscription changed, syncing with Firestore:", currentUid, event.current.id);
+                await OneSignal.login(currentUid);
+                try {
+                  await updateDoc(doc(db, "users", currentUid), {
+                    pushSubscriptionId: event.current.id,
+                    pushOptedIn: true,
+                    lastPushSync: Date.now()
+                  });
+                } catch (e) {}
+              }
+            });
+          }
+        } catch (subErr) {
+          console.warn("[OneSignal] Subscription listener notice:", subErr);
+        }
 
         this.initialized = true;
         console.log("OneSignal Initialized Successfully with App ID:", cleanAppId);
@@ -223,6 +246,26 @@ class NotificationService {
         oneSignalPromise(),
         new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 15000))
       ]);
+
+      if (result) {
+        const storedUid = typeof window !== "undefined" ? localStorage.getItem("onesignal_current_uid") : null;
+        if (storedUid) {
+          await this.loginUser(storedUid);
+          const pushId = OneSignal.User?.PushSubscription?.id;
+          if (pushId) {
+            try {
+              await updateDoc(doc(db, "users", storedUid), {
+                pushSubscriptionId: pushId,
+                pushOptedIn: true,
+                lastActiveAt: Date.now()
+              });
+            } catch (e) {}
+          }
+        }
+        playChatNotificationSound();
+        vibrateDevice([200, 100, 200]);
+        this.triggerLocalTestNotification("Al MAYADIN FASHION", "অভিনন্দন! আপনার ফোনে নোটিফিকেশন সফলভাবে চালু হয়েছে।");
+      }
 
       return result;
     } catch (err) {
@@ -328,6 +371,16 @@ class NotificationService {
         try {
           await OneSignal.login(userId);
           console.log("OneSignal User Identity (external_id) Synced:", userId);
+          const pushId = OneSignal.User?.PushSubscription?.id;
+          if (pushId) {
+            try {
+              await updateDoc(doc(db, "users", userId), {
+                pushSubscriptionId: pushId,
+                pushOptedIn: Boolean(OneSignal.User?.PushSubscription?.optedIn),
+                lastActiveAt: Date.now()
+              });
+            } catch (fsErr) {}
+          }
         } catch (webErr: any) {
           console.warn("OneSignal Web SDK login notice:", webErr?.message || webErr);
         }
@@ -574,11 +627,36 @@ class NotificationService {
       payload.large_icon = BRAND_LOGO_URL;
     }
 
+    // Look up target users' subscription IDs in Firestore for guaranteed push delivery
+    const targetSubscriptionIds: string[] = [];
     if (targetUserIds && targetUserIds.length > 0) {
-      payload.include_external_user_ids = targetUserIds;
-      payload.include_aliases = {
-        external_id: targetUserIds
-      };
+      for (const uid of targetUserIds) {
+        try {
+          const uDoc = await getDoc(doc(db, "users", uid));
+          if (uDoc.exists()) {
+            const uData = uDoc.data();
+            if (uData.pushSubscriptionId) {
+              targetSubscriptionIds.push(uData.pushSubscriptionId);
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    if ((targetUserIds && targetUserIds.length > 0) || targetSubscriptionIds.length > 0) {
+      if (targetUserIds && targetUserIds.length > 0) {
+        payload.include_external_user_ids = targetUserIds;
+        payload.include_aliases = {
+          external_id: targetUserIds
+        };
+        payload.target_channel = "push";
+      }
+      if (targetSubscriptionIds.length > 0) {
+        payload.include_subscription_ids = targetSubscriptionIds;
+        payload.include_player_ids = targetSubscriptionIds;
+      }
     } else {
       payload.included_segments = ["Total Subscriptions", "Subscribed Users", "All"];
     }
@@ -641,6 +719,7 @@ class NotificationService {
             message,
             imageUrl: validImageUrl,
             target_ids: targetUserIds,
+            subscription_ids: targetSubscriptionIds,
             data,
             appId: activeAppId,
             restApiKey: activeRestApiKey

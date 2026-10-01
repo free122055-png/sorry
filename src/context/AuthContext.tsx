@@ -210,6 +210,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         fetchProfile(firebaseUser);
         notificationService.loginUser(firebaseUser.uid);
         
+        // Update presence status to online
+        updateDoc(doc(db, "users", firebaseUser.uid), {
+          status: "online",
+          lastActiveAt: serverTimestamp()
+        }).catch(() => {});
+
         if (pendingActionRef.current) {
           const action = pendingActionRef.current;
           pendingActionRef.current = null;
@@ -225,7 +231,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    return unsubscribe;
+    const handleVisibilityChange = () => {
+      if (auth.currentUser) {
+        updateDoc(doc(db, "users", auth.currentUser.uid), {
+          status: document.visibilityState === 'visible' ? 'online' : 'offline',
+          lastActiveAt: serverTimestamp()
+        }).catch(() => {});
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      unsubscribe();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const openAuthModal = (
@@ -540,9 +560,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async (): Promise<void> => {
     try {
+      if (user) {
+        await updateDoc(doc(db, "users", user.uid), {
+          status: "offline",
+          lastActiveAt: serverTimestamp()
+        });
+      }
       await notificationService.logoutUser();
     } catch (e) {
-      console.warn("OneSignal logout warning:", e);
+      console.warn("Status/OneSignal logout warning:", e);
     }
     await firebaseSignOut(auth);
     setUser(null);

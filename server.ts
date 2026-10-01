@@ -9,8 +9,18 @@ import { v4 as uuidv4 } from "uuid";
 import { initializeApp as initAdminApp, getApps as getAdminApps } from "firebase-admin/app";
 import { getAuth as getAdminAuth } from "firebase-admin/auth";
 import { getFirestore as getAdminFirestore } from "firebase-admin/firestore";
+import { GoogleGenAI, Type } from "@google/genai";
 
 dotenv.config();
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    }
+  }
+});
 
 // Safely initialize Firebase Admin only if explicit credentials or service account is configured
 let adminInitialized = false;
@@ -39,6 +49,7 @@ try {
     title: string;
     message: string;
     recipientIds?: string[];
+    subscriptionIds?: string[];
     imageUrl?: string;
     data?: any;
     sound?: string;
@@ -46,7 +57,7 @@ try {
     customAppId?: string;
     customApiKey?: string;
   }) {
-    const { title, message, recipientIds, imageUrl, data, sound, url, customAppId, customApiKey } = params;
+    const { title, message, recipientIds, subscriptionIds, imageUrl, data, sound, url, customAppId, customApiKey } = params;
 
     let appId = customAppId || (process.env.ONESIGNAL_APP_ID || process.env.ONESIGNAL_APP || "d28392ee-2a0f-4f62-ba65-03fb3e0915ab").trim();
     if (appId.length > 36) appId = appId.substring(0, 36);
@@ -99,10 +110,20 @@ try {
       payload.large_icon = imageUrl;
     }
 
-    if (recipientIds && recipientIds.length > 0) {
-      // V3 API uses include_aliases
-      payload.include_aliases = { external_id: recipientIds };
-      payload.target_channel = "push";
+    const hasRecipients = recipientIds && recipientIds.length > 0;
+    const hasSubscriptions = subscriptionIds && subscriptionIds.length > 0;
+
+    if (hasRecipients || hasSubscriptions) {
+      if (hasRecipients) {
+        // V3 API uses include_aliases, and V1 uses include_external_user_ids
+        payload.include_aliases = { external_id: recipientIds };
+        payload.include_external_user_ids = recipientIds;
+        payload.target_channel = "push";
+      }
+      if (hasSubscriptions) {
+        payload.include_subscription_ids = subscriptionIds;
+        payload.include_player_ids = subscriptionIds;
+      }
     } else {
       payload.included_segments = ["Total Subscriptions"];
     }
@@ -440,9 +461,217 @@ try {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // PERSONAL AI AGENT: SCHEDULED CHAT MESSAGE PROCESSOR
+  // ---------------------------------------------------------------------------
+  async function processScheduledChatMessages() {
+    try {
+      const now = Date.now();
+      const messagesToDispatch: any[] = [];
+
+      if (adminInitialized && dbAdmin) {
+        try {
+          const snapshot = await dbAdmin.collection("scheduled_messages")
+            .where("status", "==", "pending")
+            .where("scheduledAt", "<=", now)
+            .get();
+          
+          snapshot.forEach((doc: any) => {
+            messagesToDispatch.push({ id: doc.id, ref: doc.ref, data: doc.data() });
+          });
+        } catch (adminErr) {
+          console.error("[AI Agent Worker] Admin SDK query notice:", adminErr);
+        }
+      }
+
+      if (messagesToDispatch.length === 0) {
+        const url = "https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents:runQuery";
+        const queryPayload = {
+          structuredQuery: {
+            from: [{ collectionId: "scheduled_messages" }],
+            where: {
+              fieldFilter: { field: { fieldPath: "status" }, op: "EQUAL", value: { stringValue: "pending" } }
+            },
+            limit: 50
+          }
+        };
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(queryPayload)
+        });
+
+        if (res.ok) {
+          const results: any = await res.json();
+          const validDocs = Array.isArray(results) ? results.filter(r => r.document) : [];
+          for (const item of validDocs) {
+            const doc = item.document;
+            const fields = doc.fields || {};
+            const scheduledAt = fields.scheduledAt?.integerValue 
+              ? parseInt(fields.scheduledAt.integerValue) 
+              : (fields.scheduledAt?.doubleValue || 0);
+
+            if (scheduledAt <= now) {
+              messagesToDispatch.push({
+                id: doc.name.split("/").pop(),
+                name: doc.name,
+                data: {
+                  senderId: fields.senderId?.stringValue || "",
+                  senderName: fields.senderName?.stringValue || "User",
+                  targetUserId: fields.targetUserId?.stringValue || "",
+                  targetUserName: fields.targetUserName?.stringValue || "",
+                  roomId: fields.roomId?.stringValue || "",
+                  message: fields.message?.stringValue || "",
+                  scheduledAt
+                }
+              });
+            }
+          }
+        }
+      }
+
+      if (messagesToDispatch.length === 0) return;
+
+      console.log(`[AI Agent Worker] Dispatching ${messagesToDispatch.length} scheduled message(s)...`);
+
+      for (const item of messagesToDispatch) {
+        const { id, data, ref, name } = item;
+        const { senderId, senderName, targetUserId, roomId, message } = data;
+
+        if (!senderId || !targetUserId || !roomId || !message) {
+          continue;
+        }
+
+        // 1. Post message into chat_rooms/{roomId}/messages
+        const messagePayload = {
+          senderId,
+          text: message,
+          sentBy: "ai_agent",
+          isScheduled: true,
+          createdAt: now,
+          read: false
+        };
+
+        const msgDocId = `msg_sched_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
+        
+        if (adminInitialized && dbAdmin) {
+          try {
+            await dbAdmin.collection("chat_rooms").doc(roomId).collection("messages").doc(msgDocId).set(messagePayload);
+            await dbAdmin.collection("chat_rooms").doc(roomId).set({
+              lastMessage: `🤖 ${message}`,
+              lastMessageAt: now,
+              [`unreadCounts.${targetUserId}`]: (dbAdmin as any).FieldValue?.increment?.(1) || 1
+            }, { merge: true });
+          } catch (e) {
+            console.error("[AI Agent Worker] Failed to write chat message via Admin:", e);
+          }
+        } else {
+          try {
+            const writeUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/chat_rooms/${roomId}/messages/${msgDocId}`;
+            await fetch(writeUrl, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fields: {
+                  senderId: { stringValue: senderId },
+                  text: { stringValue: message },
+                  sentBy: { stringValue: "ai_agent" },
+                  isScheduled: { booleanValue: true },
+                  createdAt: { integerValue: now.toString() },
+                  read: { booleanValue: false }
+                }
+              })
+            });
+
+            // Update room lastMessage
+            const roomUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/chat_rooms/${roomId}?updateMask.fieldPaths=lastMessage&updateMask.fieldPaths=lastMessageAt`;
+            await fetch(roomUrl, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fields: {
+                  lastMessage: { stringValue: `🤖 ${message}` },
+                  lastMessageAt: { integerValue: now.toString() }
+                }
+              })
+            });
+          } catch (e) {
+            console.error("[AI Agent Worker] REST write notice:", e);
+          }
+        }
+
+        // 2. Dispatch real OneSignal push notification to recipient
+        await sendOneSignalNotification({
+          title: `🤖 ${senderName} (AI Agent)`,
+          message: message,
+          recipientIds: [targetUserId],
+          url: `/chat/${roomId}`,
+          data: {
+            roomId,
+            senderId,
+            sentBy: "ai_agent",
+            isScheduled: true,
+            type: "chat"
+          }
+        });
+
+        // 3. Mark scheduled message as 'sent'
+        if (adminInitialized && ref) {
+          await ref.update({ status: "sent", sentAt: now });
+        } else if (name) {
+          const patchUrl = `https://firestore.googleapis.com/v1/${name}?updateMask.fieldPaths=status&updateMask.fieldPaths=sentAt`;
+          await fetch(patchUrl, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fields: {
+                status: { stringValue: "sent" },
+                sentAt: { integerValue: now.toString() }
+              }
+            })
+          });
+        }
+
+        // 4. Log in ai_agent_logs
+        const logId = `log_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
+        const logData = {
+          userId: senderId,
+          action: "scheduled_message_sent",
+          targetUserId,
+          details: `শিডিউলড মেসেজ সফলভাবে পাঠানো হয়েছে: "${message}"`,
+          timestamp: now
+        };
+        if (adminInitialized && dbAdmin) {
+          await dbAdmin.collection("ai_agent_logs").doc(logId).set(logData);
+        } else {
+          const logUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/ai_agent_logs/${logId}`;
+          await fetch(logUrl, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fields: {
+                userId: { stringValue: senderId },
+                action: { stringValue: "scheduled_message_sent" },
+                targetUserId: { stringValue: targetUserId },
+                details: { stringValue: logData.details },
+                timestamp: { integerValue: now.toString() }
+              }
+            })
+          });
+        }
+
+        console.log(`[AI Agent Worker] Successfully sent scheduled message ${id} from ${senderName} to ${targetUserId}`);
+      }
+    } catch (workerErr) {
+      console.error("[AI Agent Worker] Runtime error:", workerErr);
+    }
+  }
+
   // Start the background workers
   setInterval(processScheduledReminders, 30000);
   setInterval(processDailyAutomaticNotification, 60000);
+  setInterval(processScheduledChatMessages, 15000);
   setTimeout(processDailyAutomaticNotification, 10000);
 
 async function startServer() {
@@ -662,6 +891,35 @@ async function startServer() {
         error: "Premium voice service currently degraded. Falling back to device local voice.",
         details: err.message
       });
+    }
+  });
+
+  app.post("/api/generate-caption", async (req, res) => {
+    try {
+      const { topic, type = "post", mood = "engaging", currentText = "" } = req.body;
+      
+      let prompt = `You are a social media creative writer. Write a catchy, natural Bengali caption for a social media ${type}.`;
+      if (topic) prompt += ` The topic/vibe is: "${topic}".`;
+      if (currentText) prompt += ` The user already typed: "${currentText}". Enhance or complement this.`;
+      prompt += ` Include relevant Bengali emojis and 2-3 trending hashtags. Keep it engaging, natural, and within 1-3 short sentences. Respond ONLY with the final Bengali caption text without quotes or explanations.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: prompt,
+      });
+
+      const caption = response.text?.trim() || "সুন্দর একটি মুহূর্ত সবার সাথে ভাগ করে নিলাম ✨ #pulse #lifestyle";
+      res.json({ success: true, caption });
+    } catch (error: any) {
+      console.error("[AI Caption Error]:", error);
+      const fallbacks = [
+        "প্রকৃতির স্নিগ্ধতায় কাটানো কিছু অসাধারণ মুহূর্ত ✨🌿 #naturevibes #memories",
+        "জীবনের প্রতিটি সুন্দর মুহূর্ত ফ্রেমবন্দী হয়ে থাকুক হৃদয়ের কোণে 📸💫 #lifestyle #photography",
+        "নতুন দিন, নতুন অনুপ্রেরণা এবং সুন্দর স্মৃতি 🌸✨ #goodvibes #dailybliss",
+        "স্মৃতিগুলো হারিয়ে যায় না, থেকে যায় হৃদয়ের গভীরে 💖✨ #moments #life"
+      ];
+      const caption = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+      res.json({ success: true, caption });
     }
   });
 
@@ -2413,7 +2671,7 @@ async function startServer() {
 
   app.post("/api/notifications/send", async (req, res) => {
     try {
-      const { title, message, imageUrl, target_ids, data, appId, restApiKey } = req.body;
+      const { title, message, imageUrl, target_ids, subscription_ids, data, appId, restApiKey } = req.body;
       
       if (!title || !message) {
         return res.status(400).json({ error: "Title and Message are required." });
@@ -2432,6 +2690,7 @@ async function startServer() {
         title,
         message,
         recipientIds: target_ids,
+        subscriptionIds: subscription_ids,
         imageUrl: resolvedImageUrl,
         data,
         customAppId: appId,
@@ -2443,7 +2702,7 @@ async function startServer() {
         pushDelivered: success, 
         recipients: success ? (result?.recipients || 1) : 0,
         result: result,
-        message: success ? "Push notification sent." : "Saved in-app notification."
+        message: success ? "Push notification sent." : (result?.errors?.[0] || "Saved in-app notification.")
       });
     } catch (error: any) {
       res.status(200).json({ success: true, message: "In-app notification saved." });
@@ -2470,6 +2729,348 @@ async function startServer() {
         alreadySentToday: dailyNotificationLastSentDate === bstDateStr
       });
     } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // PERSONAL AI AGENT ENDPOINTS
+  // ---------------------------------------------------------------------------
+
+  // 1. Process Offline Auto-Reply
+  app.post("/api/ai-agent/auto-reply", async (req, res) => {
+    try {
+      const { senderId, senderName, recipientId, recipientName, roomId, message, recentMessages } = req.body;
+      if (!recipientId || !senderId || !roomId || !message) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Check recipient's AI Agent configuration in Firestore
+      let agentConfig: any = {
+        enabled: true,
+        agentName: "Personal AI",
+        persona: "friendly",
+        customInstructions: "",
+        autoReplyOffline: true,
+        sensitiveActionGuard: true
+      };
+
+      if (adminInitialized && dbAdmin) {
+        try {
+          const cfgSnap = await dbAdmin.collection("user_ai_agents").doc(recipientId).get();
+          if (cfgSnap.exists) {
+            agentConfig = { ...agentConfig, ...cfgSnap.data() };
+          }
+        } catch (e) {}
+      } else {
+        try {
+          const fsUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/user_ai_agents/${recipientId}`;
+          const fsRes = await fetch(fsUrl);
+          if (fsRes.ok) {
+            const fsData = await fsRes.json();
+            const f = fsData.fields || {};
+            agentConfig.enabled = f.enabled?.booleanValue ?? true;
+            agentConfig.agentName = f.agentName?.stringValue || "Personal AI";
+            agentConfig.customInstructions = f.customInstructions?.stringValue || "";
+            agentConfig.autoReplyOffline = f.autoReplyOffline?.booleanValue ?? true;
+            agentConfig.sensitiveActionGuard = f.sensitiveActionGuard?.booleanValue ?? true;
+          }
+        } catch (e) {}
+      }
+
+      if (agentConfig.enabled === false || agentConfig.autoReplyOffline === false) {
+        return res.json({ skipped: true, reason: "AI auto-reply disabled for recipient" });
+      }
+
+      const instructions = agentConfig.customInstructions || "User is currently resting or offline. Be polite, say they will respond when online.";
+      
+      const prompt = `
+You are the trusted Personal AI Agent of ${recipientName || "the user"}.
+${recipientName || "The user"} is currently offline or sleeping.
+A contact named "${senderName || "A friend"}" sent this message in live chat:
+"${message}"
+
+Recent conversation context:
+${Array.isArray(recentMessages) ? recentMessages.slice(-4).map((m: any) => `${m.senderName || 'Contact'}: ${m.text}`).join('\n') : ''}
+
+USER'S CUSTOM INSTRUCTIONS FOR THEIR AI AGENT:
+"${instructions}"
+
+STRICT SAFETY GUARDRAILS:
+1. You are an AI Agent representing ${recipientName}. Clearly acknowledge you are their personal AI assistant.
+2. DO NOT make any sensitive, financial, contract, or binding commitments on ${recipientName}'s behalf. If asked about money, discounts, loans, or agreements, state that ${recipientName} will review and decide when back online.
+3. Be respectful, helpful, friendly, and concise (1 to 3 short sentences max).
+4. Respond in natural Bengali (or English if the sender strictly spoke English).
+`;
+
+      let replyText = "";
+      try {
+        let aiResponse;
+        try {
+          aiResponse = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: prompt,
+            config: {
+              systemInstruction: "You are a professional, helpful personal AI assistant replying on behalf of an offline user in a chat app. Keep responses short and conversational."
+            }
+          });
+        } catch (firstErr) {
+          console.warn("[AI Auto-Reply] gemini-3.1-flash-lite retry notice, trying gemini-2.5-flash:", firstErr);
+          aiResponse = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+              systemInstruction: "You are a professional, helpful personal AI assistant replying on behalf of an offline user in a chat app. Keep responses short and conversational."
+            }
+          });
+        }
+        replyText = aiResponse.text?.trim() || "";
+      } catch (genErr) {
+        console.warn("[AI Auto-Reply] Gemini generation fallback notice:", genErr);
+      }
+
+      if (!replyText) {
+        if (instructions && instructions.length > 5) {
+          replyText = `আসসালামু আলাইকুম, আমি ${recipientName}-এর পার্সোনাল AI অ্যাসিস্ট্যান্ট। ${instructions}`;
+        } else {
+          replyText = `আসসালামু আলাইকুম, আমি ${recipientName}-এর পার্সোনাল AI অ্যাসিস্ট্যান্ট। উনি বর্তমানে অফলাইনে আছেন। উনি অনলাইনে আসলে আপনার মেসেজটি দেখবেন।`;
+        }
+      }
+
+      const now = Date.now();
+      const msgDocId = `msg_ai_${now}_${crypto.randomBytes(3).toString("hex")}`;
+      const messagePayload = {
+        senderId: recipientId,
+        text: replyText,
+        sentBy: "ai_agent",
+        isAutoReply: true,
+        createdAt: now,
+        read: false
+      };
+
+      // 1. Save reply message in chat_rooms/{roomId}/messages
+      if (adminInitialized && dbAdmin) {
+        await dbAdmin.collection("chat_rooms").doc(roomId).collection("messages").doc(msgDocId).set(messagePayload);
+        await dbAdmin.collection("chat_rooms").doc(roomId).set({
+          lastMessage: `🤖 ${replyText}`,
+          lastMessageAt: now,
+          [`unreadCounts.${senderId}`]: (dbAdmin as any).FieldValue?.increment?.(1) || 1
+        }, { merge: true });
+      } else {
+        const msgUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/chat_rooms/${roomId}/messages/${msgDocId}`;
+        await fetch(msgUrl, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fields: {
+              senderId: { stringValue: recipientId },
+              text: { stringValue: replyText },
+              sentBy: { stringValue: "ai_agent" },
+              isAutoReply: { booleanValue: true },
+              createdAt: { integerValue: now.toString() },
+              read: { booleanValue: false }
+            }
+          })
+        });
+
+        const roomPatchUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/chat_rooms/${roomId}?updateMask.fieldPaths=lastMessage&updateMask.fieldPaths=lastMessageAt`;
+        await fetch(roomPatchUrl, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fields: {
+              lastMessage: { stringValue: `🤖 ${replyText}` },
+              lastMessageAt: { integerValue: now.toString() }
+            }
+          })
+        });
+      }
+
+      // 2. Dispatch push notification to sender
+      await sendOneSignalNotification({
+        title: `🤖 ${recipientName} (AI Agent)`,
+        message: replyText,
+        recipientIds: [senderId],
+        url: `/chat/${roomId}`,
+        data: {
+          roomId,
+          senderId: recipientId,
+          sentBy: "ai_agent",
+          isAutoReply: true,
+          type: "chat"
+        }
+      });
+
+      // 3. Log into ai_agent_logs
+      const logId = `log_${now}_${crypto.randomBytes(3).toString("hex")}`;
+      const logPayload = {
+        userId: recipientId,
+        action: "auto_reply",
+        targetUserId: senderId,
+        targetUserName: senderName || "Friend",
+        details: `অটো-রিপ্লাই দেওয়া হয়েছে: "${replyText}" (মূল মেসেজ: "${message}")`,
+        timestamp: now
+      };
+
+      if (adminInitialized && dbAdmin) {
+        await dbAdmin.collection("ai_agent_logs").doc(logId).set(logPayload);
+      } else {
+        const logUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/ai_agent_logs/${logId}`;
+        await fetch(logUrl, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fields: {
+              userId: { stringValue: recipientId },
+              action: { stringValue: "auto_reply" },
+              targetUserId: { stringValue: senderId },
+              targetUserName: { stringValue: senderName || "Friend" },
+              details: { stringValue: logPayload.details },
+              timestamp: { integerValue: now.toString() }
+            }
+          })
+        });
+      }
+
+      res.json({ success: true, replyText });
+    } catch (e: any) {
+      console.error("[AI Auto-Reply Error]:", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 2. Parse Natural Language Schedule Command
+  app.post("/api/ai-agent/parse-command", async (req, res) => {
+    try {
+      const { command, availableUsers } = req.body;
+      if (!command) {
+        return res.status(400).json({ error: "Command text is required" });
+      }
+
+      const usersListStr = Array.isArray(availableUsers)
+        ? availableUsers.map((u: any) => `ID: ${u.id}, Name: ${u.displayName}`).join("\n")
+        : "";
+
+      const prompt = `
+You are an intelligent scheduling assistant for personal chat.
+Current time: ${new Date().toISOString()} (BST / Asia/Dhaka is UTC+6).
+The user wants to command their Personal AI Agent:
+"${command}"
+
+Available Contacts to match from:
+${usersListStr}
+
+Your task is to parse:
+1. targetUserId (match closest name from available contacts, or null if unknown)
+2. targetUserName (matched name or name mentioned in command)
+3. messageText (the message to send)
+4. scheduledAtTimestamp (unix timestamp in milliseconds for when to send). Note: if user said "রাত ১২টা", calculate the exact next midnight timestamp. If "সকাল ৯টা", calculate the next 9:00 AM.
+5. explanation (brief Bengali description of what will be scheduled, e.g. "রহিমকে আজ রাত ১২:০০ টায় মেসেজ পাঠানো হবে")
+`;
+
+      let parsed: any = null;
+      try {
+        let response;
+        try {
+          response = await ai.models.generateContent({
+            model: "gemini-3.1-flash-lite",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  targetUserId: { type: Type.STRING },
+                  targetUserName: { type: Type.STRING },
+                  messageText: { type: Type.STRING },
+                  scheduledAtTimestamp: { type: Type.NUMBER },
+                  explanation: { type: Type.STRING }
+                },
+                required: ["targetUserName", "messageText", "scheduledAtTimestamp", "explanation"]
+              }
+            }
+          });
+        } catch (firstErr) {
+          console.warn("[AI Parse Command] gemini-3.1-flash-lite notice, trying gemini-2.5-flash:", firstErr);
+          response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  targetUserId: { type: Type.STRING },
+                  targetUserName: { type: Type.STRING },
+                  messageText: { type: Type.STRING },
+                  scheduledAtTimestamp: { type: Type.NUMBER },
+                  explanation: { type: Type.STRING }
+                },
+                required: ["targetUserName", "messageText", "scheduledAtTimestamp", "explanation"]
+              }
+            }
+          });
+        }
+
+        if (response?.text) {
+          parsed = JSON.parse(response.text);
+        }
+      } catch (aiErr) {
+        console.warn("[AI Parse Command] AI model fallback notice, using heuristic parser:", aiErr);
+      }
+
+      // Smart heuristic fallback if AI had a temporary 503 or network error
+      if (!parsed || !parsed.messageText) {
+        let matchedUser: any = null;
+        if (Array.isArray(availableUsers)) {
+          matchedUser = availableUsers.find((u: any) => 
+            u.displayName && command.toLowerCase().includes(u.displayName.toLowerCase())
+          );
+        }
+
+        // Determine target time
+        const now = new Date();
+        let targetTime = new Date();
+        targetTime.setHours(targetTime.getHours() + 1, 0, 0, 0); // default +1 hour
+
+        if (command.includes("রাত ১২") || command.includes("রাত 12") || command.includes("12 am") || command.includes("12:00 am")) {
+          targetTime = new Date();
+          targetTime.setDate(targetTime.getDate() + 1);
+          targetTime.setHours(0, 0, 0, 0);
+        } else if (command.includes("সকাল ৯") || command.includes("সকাল 9") || command.includes("9 am")) {
+          targetTime = new Date();
+          if (now.getHours() >= 9) targetTime.setDate(targetTime.getDate() + 1);
+          targetTime.setHours(9, 0, 0, 0);
+        } else if (command.includes("সন্ধ্যা") || command.includes("সন্ধ্যা ৭") || command.includes("7 pm")) {
+          targetTime = new Date();
+          if (now.getHours() >= 19) targetTime.setDate(targetTime.getDate() + 1);
+          targetTime.setHours(19, 0, 0, 0);
+        }
+
+        // Extract message: inside quotes or after "বলো"/"পাঠাও"/"মেসেজ"
+        let msg = command;
+        const quoteMatch = command.match(/["'“‘](.+?)["'”’]/);
+        if (quoteMatch) {
+          msg = quoteMatch[1];
+        } else {
+          const splitWord = command.includes("বলো") ? "বলো" : (command.includes("পাঠাও") ? "পাঠাও" : (command.includes("মেসেজ") ? "মেসেজ" : ""));
+          if (splitWord) {
+            msg = command.split(splitWord).pop()?.trim().replace(/^[:,\s]+/, "") || command;
+          }
+        }
+
+        parsed = {
+          targetUserId: matchedUser?.id || (availableUsers?.[0]?.id || ""),
+          targetUserName: matchedUser?.displayName || (availableUsers?.[0]?.displayName || "ইউজার"),
+          messageText: msg,
+          scheduledAtTimestamp: targetTime.getTime(),
+          explanation: `${matchedUser?.displayName || "ইউজার"}-কে নির্ধারিত সময়ে এই মেসেজ পাঠানো হবে।`
+        };
+      }
+
+      res.json({ success: true, data: parsed });
+    } catch (e: any) {
+      console.error("[AI Parse Command Error]:", e);
       res.status(500).json({ error: e.message });
     }
   });
