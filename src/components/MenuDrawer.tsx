@@ -31,6 +31,8 @@ import { useNotificationContext } from "../context/NotificationContext";
 import { auth } from "../lib/firebase";
 import { signOut } from "firebase/auth";
 import { getApiUrl } from "../lib/api";
+import { LanguageToggle } from "./LanguageToggle";
+import { useLanguage } from "../context/LanguageContext";
 
 interface MenuDrawerProps {
   isOpen: boolean;
@@ -41,6 +43,7 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
   const { user, profile, updateUserEmail } = useAuth();
   const { items: cartItems } = useCart();
   const { unreadCount } = useNotificationContext();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   // Email Save Form State
@@ -221,13 +224,13 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
 
                   <div className="min-w-0">
                     <div className="text-[10px] font-medium text-gray-500 leading-tight">
-                      {user ? "আসসালামু আলাইকুম" : "স্বাগতম"}
+                      {user ? t("greeting") : t("welcome")}
                     </div>
                     <div className="text-sm font-black text-gray-900 truncate leading-snug mt-0.5 group-hover:text-[#004b23] transition-colors">
                       {displayName}
                     </div>
                     <div className="inline-flex items-center gap-1 bg-[#fffbeb] text-[#b45309] border border-[#fde68a] text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">
-                      <span>👑</span> {user ? "Gold Member" : "গেস্ট গ্রাহক"}
+                      <span>👑</span> {user ? t("goldMember") : t("guestUser")}
                     </div>
                   </div>
                 </div>
@@ -238,11 +241,13 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
 
             {/* Menu Body - Scrollable Full-Screen Sections */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+              {/* Language Section */}
+              <LanguageToggle darkMode={false} />
               
               {/* 1. শপিং (Shopping) */}
               <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden">
                 <div className="bg-[#f8faf9] px-4 py-2 text-[11px] font-black uppercase tracking-wider text-emerald-900 border-b border-gray-100 flex items-center justify-between">
-                  <span>শপিং</span>
+                  <span>{t("shopping")}</span>
                 </div>
                 <div className="divide-y divide-gray-100/90 text-[13px]">
                   
@@ -255,7 +260,7 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                       <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#004b23] flex items-center justify-center group-hover:scale-105 transition-transform">
                         <LayoutGrid className="w-4 h-4 stroke-[2.2]" />
                       </div>
-                      <span className="group-hover:text-[#004b23] transition-colors">সব ক্যাটাগরি</span>
+                      <span className="group-hover:text-[#004b23] transition-colors">{t("allCategories")}</span>
                     </div>
                     <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#004b23] group-hover:translate-x-0.5 transition-all" />
                   </button>
@@ -269,7 +274,7 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                       <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-700 flex items-center justify-center group-hover:scale-105 transition-transform">
                         <Sparkles className="w-4 h-4 stroke-[2.2]" />
                       </div>
-                      <span className="group-hover:text-pink-700 transition-colors">❝ ক্যাপশন ঘর</span>
+                      <span className="group-hover:text-pink-700 transition-colors">{t("captionHouseMenu")}</span>
                     </div>
                     <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-pink-700 group-hover:translate-x-0.5 transition-all" />
                   </button>
@@ -283,7 +288,7 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                       <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center group-hover:scale-105 transition-transform">
                         <BookOpen className="w-4 h-4 stroke-[2.2]" />
                       </div>
-                      <span className="group-hover:text-rose-700 transition-colors">💍 বিবাহের বায়োডাটা</span>
+                      <span className="group-hover:text-rose-700 transition-colors">{t("matrimonialMenu")}</span>
                     </div>
                     <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-rose-700 group-hover:translate-x-0.5 transition-all" />
                   </button>
@@ -297,7 +302,7 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                       <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#004b23] flex items-center justify-center group-hover:scale-105 transition-transform">
                         <ShoppingCart className="w-4 h-4 stroke-[2.2]" />
                       </div>
-                      <span className="group-hover:text-[#004b23] transition-colors">কার্ট</span>
+                      <span className="group-hover:text-[#004b23] transition-colors">{t("cart")}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       {cartItems.length > 0 && (
@@ -318,7 +323,7 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                       <div className="w-8 h-8 rounded-xl bg-emerald-50 text-[#004b23] flex items-center justify-center group-hover:scale-105 transition-transform">
                         <MapPin className="w-4 h-4 stroke-[2.2]" />
                       </div>
-                      <span className="group-hover:text-[#004b23] transition-colors">আমার ঠিকানা</span>
+                      <span className="group-hover:text-[#004b23] transition-colors">{t("myAddresses")}</span>
                     </div>
                     <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-[#004b23] group-hover:translate-x-0.5 transition-all" />
                   </button>
@@ -334,10 +339,10 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                   </div>
                   <div>
                     <h3 className="text-xs font-black text-white leading-tight">
-                      ইমেইল অফার ও নোটিফিকেশন
+                      {t("emailOffersTitle")}
                     </h3>
                     <p className="text-[10px] text-emerald-200 mt-0.5">
-                      আপনার ইমেইল সেভ রাখুন, স্পেশাল অফার ও আপডেট সরাসরি ইমেইলে পাবেন
+                      {t("emailOffersDesc")}
                     </p>
                   </div>
                 </div>
@@ -345,7 +350,7 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                 {emailSavedSuccess ? (
                   <div className="bg-emerald-800/90 border border-emerald-500/80 rounded-xl p-3 text-[11px] font-bold text-white flex items-center gap-2 animate-fadeIn">
                     <CheckCircle2 className="w-4 h-4 text-amber-300 shrink-0" />
-                    <span>আপনার ইমেইল সফলভাবে সেভ করা হয়েছে!</span>
+                    <span>{t("savedSuccessfully")}</span>
                   </div>
                 ) : (
                   <form onSubmit={handleSaveEmail} className="space-y-2">
@@ -354,7 +359,7 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                         type="email"
                         value={emailInput}
                         onChange={(e) => setEmailInput(e.target.value)}
-                        placeholder="আপনার ইমেইল এড্রেস লিখুন..."
+                        placeholder={`${t("enterEmail")}...`}
                         className="w-full bg-white/10 border border-emerald-600/60 rounded-xl px-3 py-2.5 pl-9 text-xs text-white placeholder-emerald-300/70 focus:outline-none focus:ring-2 focus:ring-amber-400"
                         required
                       />
@@ -371,7 +376,7 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                       className="w-full py-2.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-gray-950 rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-all cursor-pointer disabled:opacity-50"
                     >
                       <Save className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>{isSavingEmail ? "সেভ হচ্ছে..." : "ইমেইল সেভ করুন"}</span>
+                      <span>{isSavingEmail ? t("saving") : t("saveEmail")}</span>
                     </button>
                   </form>
                 )}

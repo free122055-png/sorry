@@ -14,6 +14,7 @@ import { FloatingOrderBubble } from "./components/FloatingOrderBubble";
 
 import { NotificationProvider } from "./context/NotificationContext";
 import { QuranProvider } from "./context/QuranContext";
+import { LanguageProvider } from "./context/LanguageContext";
 
 // Primary navigation & core feature pages imported directly for 0ms instant transitions
 import { Home } from "./pages/Home";
@@ -165,6 +166,7 @@ function EmailPromptHandler() {
 
 function AppLayout() {
   const location = useLocation();
+  const isHome = location.pathname === "/";
   const isTilawat = location.pathname === "/islamic-tilawat" || location.pathname === "/tilawat";
   const isPixelEditor = location.pathname === "/pixel-editing-tools" || 
                         location.pathname === "/pixel-tools" || 
@@ -273,16 +275,18 @@ function AppLayout() {
 export default function App() {
   return (
     <Router>
-      <AuthProvider>
-        <NotificationProvider>
-          <NotificationInitializer />
-          <CartProvider>
-            <QuranProvider>
-              <AppLayout />
-            </QuranProvider>
-          </CartProvider>
-        </NotificationProvider>
-      </AuthProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <NotificationInitializer />
+            <CartProvider>
+              <QuranProvider>
+                <AppLayout />
+              </QuranProvider>
+            </CartProvider>
+          </NotificationProvider>
+        </AuthProvider>
+      </LanguageProvider>
     </Router>
   );
 }

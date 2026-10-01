@@ -12,31 +12,32 @@ import { StorefrontFacade } from "../components/StorefrontFacade";
 import { DynamicBannerSlider } from "../components/DynamicBannerSlider";
 import { AnimatedSearchInput } from "../components/AnimatedSearchInput";
 import { useAuth } from "../context/AuthContext";
+import { useLanguage } from "../context/LanguageContext";
 import { db } from "../lib/firebase";
 import { doc, getDoc, collection, onSnapshot } from "firebase/firestore";
 
 const MARKET_CATEGORIES = [
   {
     id: "cat2",
-    name: "অয়েল কর্নার",
+    key: "oilCorner",
     icon: <Droplet className="w-5 h-5 text-white" />,
     iconBg: "bg-amber-600",
   },
   {
     id: "cat3",
-    name: "কাপড় ও পরিধান",
+    key: "clothingShop",
     icon: <Shirt className="w-5 h-5 text-white" />,
     iconBg: "bg-[#0ea5e9]",
   },
   {
     id: "cat4",
-    name: "উপহার বাজার",
+    key: "giftShop",
     icon: <ShoppingBasket className="w-5 h-5 text-white" />,
     iconBg: "bg-[#f97316]",
   },
   {
     id: "cat6",
-    name: "ইসলামিক বাজার",
+    key: "islamicShop",
     icon: <Book className="w-5 h-5 text-white" />,
     iconBg: "bg-[#059669]",
   }
@@ -44,7 +45,7 @@ const MARKET_CATEGORIES = [
 
 interface FeatureCardItem {
   id: string;
-  name: string;
+  key: string;
   icon: React.ReactNode;
   iconBg: string;
   path: string;
@@ -53,56 +54,56 @@ interface FeatureCardItem {
 const FEATURE_SERVICES: FeatureCardItem[] = [
   {
     id: "tilawat",
-    name: "তেলাওয়াত",
+    key: "tilawatLibrary",
     icon: <BookOpenText className="w-5 h-5 text-white" />,
     iconBg: "bg-[#0a3d2e]",
     path: "/islamic-tilawat"
   },
   {
     id: "caption",
-    name: "ক্যাপশন",
+    key: "captionHouse",
     icon: <FileText className="w-5 h-5 text-white" />,
     iconBg: "bg-[#0a3d2e]",
     path: "/caption-ghor"
   },
   {
     id: "editing",
-    name: "এডিটিং",
+    key: "editingTools",
     icon: <Camera className="w-5 h-5 text-white" />,
     iconBg: "bg-[#0a3d2e]",
     path: "/pixel-editing-tools"
   },
   {
     id: "matrimonial",
-    name: "বায়োডাটা",
+    key: "marriageBiodata",
     icon: <HeartPulse className="w-5 h-5 text-white" />,
     iconBg: "bg-[#0a3d2e]",
     path: "/matrimonial"
   },
   {
     id: "telecom",
-    name: "প্যাক ক্রয়",
+    key: "mbMinutesPurchase",
     icon: <Router className="w-5 h-5 text-white" />,
     iconBg: "bg-[#044a2f]",
     path: "/telecom"
   },
   {
     id: "reminder",
-    name: "রিমাইন্ডার",
+    key: "reminderForLovedOnes",
     icon: <ReceiptText className="w-5 h-5 text-white" />,
     iconBg: "bg-[#0a3d2e]",
     path: "/reminders"
   },
   {
     id: "live_location",
-    name: "লাইভ লোকেশন",
+    key: "liveLocationForLovedOnes",
     icon: <MapPin className="w-5 h-5 text-white" />,
     iconBg: "bg-[#004b23]",
     path: "/live-location"
   },
   {
     id: "gov_services",
-    name: "সরকারি সেবা",
+    key: "governmentServices",
     icon: <Globe className="w-5 h-5 text-white" />,
     iconBg: "bg-[#0a3d2e]",
     path: "/gov-services"
@@ -113,16 +114,13 @@ const FEATURE_SERVICES: FeatureCardItem[] = [
 const getFrameColor = (iconBg: string) => {
   if (iconBg.includes("amber") || iconBg.includes("orange")) return "border-emerald-600";
   if (iconBg.includes("sky") || iconBg.includes("blue")) return "border-emerald-600";
-  if (iconBg.includes("pink")) return "border-emerald-600";
-  if (iconBg.includes("slate")) return "border-emerald-600";
-  if (iconBg.includes("rose")) return "border-emerald-600";
-  if (iconBg.includes("emerald") || iconBg.includes("#004b23") || iconBg.includes("#0a3d2e") || iconBg.includes("#044a2f")) return "border-emerald-600";
+  if (iconBg.includes("emerald") || iconBg.includes("green")) return "border-emerald-600";
   return "border-emerald-600";
 };
 
 export const Home: React.FC = () => {
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { t } = useLanguage();
   const [searchTerm, setSearchTerm] = useState("");
   const [customIcons, setCustomIcons] = useState<Record<string, string>>({});
 
@@ -183,23 +181,7 @@ export const Home: React.FC = () => {
         description="Shop premium fashion, groceries and create professional designs with All Mayadin Fashion." 
       />
 
-      <main className="flex-1 overflow-y-auto w-full pt-20">
-        {/* 1. Storefront Facade */}
-        <StorefrontFacade />
-
-        {/* 2. Overlapping Search Bar exactly matching the screenshot layout */}
-        <div className="relative px-6 sm:px-10 -mt-6 sm:-mt-8 mb-6 z-30 max-w-xl mx-auto">
-          <AnimatedSearchInput
-            value={searchTerm}
-            onChange={handleSearchChange}
-            onSubmit={handleSearchSubmit}
-            category="general"
-            onClear={() => setSearchTerm("")}
-            showClearButton={false}
-            inputClassName="rounded-full pl-11 pr-4 py-4 text-sm font-black shadow-[0_4px_20px_rgba(0,0,0,0.08)] border border-gray-200 bg-white text-gray-800 placeholder-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-100"
-          />
-        </div>
-
+      <main className="flex-1 overflow-y-auto w-full pt-32 sm:pt-36">
         {/* 3. Admin Managed Banner Slider */}
         <DynamicBannerSlider />
 
@@ -208,7 +190,7 @@ export const Home: React.FC = () => {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-[19px] font-black text-[#0f172a] tracking-tight">আমাদের প্রধান বাজার সমূহ</h3>
+                <h3 className="text-[19px] font-black text-[#0f172a] tracking-tight">{t("mainMarkets")}</h3>
               </div>
             </div>
 
@@ -225,12 +207,12 @@ export const Home: React.FC = () => {
                   <div className={`w-[78px] h-[82px] sm:w-[90px] sm:h-[92px] rounded-2xl bg-white border ${getFrameColor(cat.iconBg)} flex flex-col items-center justify-center p-1.5 transition-all shadow-xs`}>
                       <div className={`w-[44px] h-[44px] rounded-full ${cat.iconBg} flex items-center justify-center mb-1 overflow-hidden shadow-xs`}>
                         {customIcons[cat.id] ? (
-                          <img src={customIcons[cat.id]} alt={cat.name} className="w-full h-full object-cover" />
+                          <img src={customIcons[cat.id]} alt={t(cat.key)} className="w-full h-full object-cover" />
                         ) : (
                           React.cloneElement(cat.icon as React.ReactElement, { className: "w-6 h-6 text-white" })
                         )}
                       </div>
-                      <span className="text-[10px] sm:text-[11px] font-bold text-gray-800 text-center leading-tight truncate w-full">{cat.name}</span>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-gray-800 text-center leading-tight truncate w-full">{t(cat.key)}</span>
                   </div>
                 </motion.div>
               ))}
@@ -239,7 +221,7 @@ export const Home: React.FC = () => {
             {/* Section: Feature Services - Circular Premium Style */}
             <div className="mt-8 mb-4">
               <div>
-                <h3 className="text-[19px] font-black text-[#0f172a] tracking-tight">অন্যান্য সেবা</h3>
+                <h3 className="text-[19px] font-black text-[#0f172a] tracking-tight">{t("otherServices")}</h3>
               </div>
             </div>
             
@@ -254,29 +236,22 @@ export const Home: React.FC = () => {
                   <div className={`w-[78px] h-[82px] sm:w-[90px] sm:h-[92px] rounded-2xl bg-white border ${getFrameColor(item.iconBg)} flex flex-col items-center justify-center p-1.5 transition-all shadow-xs`}>
                       <div className={`w-[44px] h-[44px] rounded-full ${item.iconBg} flex items-center justify-center mb-1 overflow-hidden shadow-xs`}>
                         {customIcons[item.id] ? (
-                          <img src={customIcons[item.id]} alt={item.name} className="w-full h-full object-cover" />
+                          <img src={customIcons[item.id]} alt={t(item.key)} className="w-full h-full object-cover" />
                         ) : (
                           React.cloneElement(item.icon as React.ReactElement, { className: "w-6 h-6 text-white" })
                         )}
                       </div>
-                      <span className="text-[10px] sm:text-[11px] font-bold text-gray-800 text-center leading-tight truncate w-full">{item.name}</span>
+                      <span className="text-[10px] sm:text-[11px] font-bold text-gray-800 text-center leading-tight truncate w-full">{t(item.key)}</span>
                   </div>
                 </motion.div>
               ))}
             </div>
           </div>
         </div>
+
       </main>
     </div>
   );
 };
 
-
-const NavButton: React.FC<{ icon: React.ReactNode; active?: boolean }> = ({ icon, active }) => (
-  <button className={`p-2 transition-all active:scale-90 relative ${active ? "text-blue-500" : "text-white/40 hover:text-white/60"}`}>
-    {React.cloneElement(icon as React.ReactElement, { className: "w-8 h-8" })}
-    {active && (
-      <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-1 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]" />
-    )}
-  </button>
-);
+export default Home;

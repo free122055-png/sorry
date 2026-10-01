@@ -2,10 +2,12 @@ import React from "react";
 import { Home, LayoutGrid, ShoppingCart, User } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useCart } from "../context/CartContext";
+import { useLanguage } from "../context/LanguageContext";
 
 export const BottomNav: React.FC = () => {
   const location = useLocation();
   const { totalItems } = useCart();
+  const { t } = useLanguage();
   const isFoodMarket = location.pathname === "/category/cat1" || location.pathname.startsWith("/food/");
   const isAdmin = location.pathname.startsWith("/admin") || location.pathname.startsWith("/super-admin");
   const isTilawat = location.pathname === "/islamic-tilawat" || location.pathname === "/tilawat";
@@ -30,7 +32,7 @@ export const BottomNav: React.FC = () => {
             <div className="absolute -top-1.5 w-7 h-1 bg-[#005a36] rounded-full" />
           )}
           <Home className={`w-6 h-6 ${location.pathname === "/" ? "stroke-[2.5]" : "stroke-[1.8]"}`} />
-          <span className="text-[10px] font-bold">হোম</span>
+          <span className="text-[10px] font-bold">{t("home")}</span>
         </Link>
 
         {/* 2. Categories */}
@@ -45,7 +47,7 @@ export const BottomNav: React.FC = () => {
             <div className="absolute -top-1.5 w-7 h-1 bg-[#005a36] rounded-full" />
           )}
           <LayoutGrid className={`w-6 h-6 ${location.pathname === "/categories" ? "stroke-[2.5]" : "stroke-[1.8]"}`} />
-          <span className="text-[10px] font-bold">ক্যাটাগরি</span>
+          <span className="text-[10px] font-bold">{t("categories")}</span>
         </Link>
 
         {/* 3. Cart */}
@@ -67,7 +69,7 @@ export const BottomNav: React.FC = () => {
               </span>
             )}
           </div>
-          <span className="text-[10px] font-bold">কার্ট</span>
+          <span className="text-[10px] font-bold">{t("cart")}</span>
         </Link>
 
         {/* 4. Account */}
@@ -82,10 +84,9 @@ export const BottomNav: React.FC = () => {
             <div className="absolute -top-1.5 w-7 h-1 bg-[#005a36] rounded-full" />
           )}
           <User className={`w-6 h-6 ${location.pathname === "/account" ? "stroke-[2.5]" : "stroke-[1.8]"}`} />
-          <span className="text-[10px] font-bold">অ্যাকাউন্ট</span>
+          <span className="text-[10px] font-bold">{t("account")}</span>
         </Link>
       </div>
     </nav>
   );
 };
-

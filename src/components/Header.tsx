@@ -5,11 +5,13 @@ import { MenuDrawer } from "./MenuDrawer";
 import { useNotificationContext } from "../context/NotificationContext";
 import { AnimatedBrandLogo } from "./AnimatedBrandLogo";
 import { AnimatedSearchInput } from "./AnimatedSearchInput";
+import { useLanguage } from "../context/LanguageContext";
 
 export const Header: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { unreadCount } = useNotificationContext();
+  const { t } = useLanguage();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const isHome = location.pathname === "/";
@@ -39,8 +41,8 @@ export const Header: React.FC = () => {
 
   return (
     <>
-      <header className={`fixed top-0 left-0 right-0 z-50 bg-[#052b1b] text-white shadow-md transition-all duration-300 py-3`}>
-        <div className="px-4 max-w-7xl mx-auto">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-[#052b1b] text-white shadow-md transition-all duration-300 pt-3 pb-8 overflow-visible">
+        <div className="px-4 max-w-7xl mx-auto mb-2">
           {/* Top Row: Menu - Brand Logo - Notifications */}
           <div className="flex items-center justify-between">
             {/* Hamburger Button with zero tap delay */}
@@ -73,6 +75,20 @@ export const Header: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Floating Search Bar positioned exactly 50% on the header bottom boundary */}
+        <div className="absolute left-0 right-0 bottom-0 translate-y-1/2 px-6 sm:px-10 z-50 max-w-xl mx-auto pointer-events-auto">
+          <AnimatedSearchInput
+            value={searchTerm}
+            onChange={handleSearchChange}
+            onSubmit={handleSearchSubmit}
+            category="general"
+            onClear={() => setSearchTerm("")}
+            showClearButton={false}
+            placeholder={t("searchPlaceholder")}
+            inputClassName="rounded-full pl-11 pr-4 py-2.5 sm:py-3 text-sm font-black shadow-[0_6px_24px_rgba(0,0,0,0.15)] border border-gray-200 bg-white text-gray-800 placeholder-gray-400 focus:border-gray-300 focus:ring-2 focus:ring-gray-100"
+          />
+        </div>
       </header>
 
       {/* Slide-out Menu Drawer */}
@@ -80,4 +96,4 @@ export const Header: React.FC = () => {
     </>
   );
 };
-
+export default Header;

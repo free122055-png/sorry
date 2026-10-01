@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { User, Package, MapPin, Heart, Bell, Shield, LogOut, ChevronRight, Settings, Edit3, X, Check, Camera, Phone, FileText, LockIcon, Trash2, AlertTriangle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useNotificationContext } from "../context/NotificationContext";
+import { useLanguage } from "../context/LanguageContext";
 import { auth, db } from "../lib/firebase";
 import { signOut, updateProfile as updateFirebaseProfile } from "firebase/auth";
 import { doc, setDoc, serverTimestamp, collection, query, where, getDocs } from "firebase/firestore";
@@ -13,6 +14,7 @@ import { DeleteAccountModal } from "../components/DeleteAccountModal";
 export const Account: React.FC = () => {
   const { user, profile, loading, refreshProfile } = useAuth();
   const { unreadCount } = useNotificationContext();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -61,7 +63,7 @@ export const Account: React.FC = () => {
       }, { merge: true });
 
       await refreshProfile();
-      setSuccessMsg("প্রোফাইল সফলভাবে আপডেট করা হয়েছে!");
+      setSuccessMsg(t("profileUpdatedSuccess"));
       setTimeout(() => {
         setIsEditing(false);
         setSuccessMsg("");
@@ -74,18 +76,18 @@ export const Account: React.FC = () => {
   };
 
   const accountMenu = [
-    { icon: Package, label: "🛍️ আমার অর্ডারসমূহ", path: "/orders" },
-    { icon: Heart, label: "❤️ পছন্দের তালিকা", path: "/wishlist" },
-    { icon: MapPin, label: "📍 সংরক্ষিত ঠিকানা", path: "/addresses" },
-    { icon: Bell, label: "🔔 বিজ্ঞপ্তি", path: "/notifications", count: unreadCount > 0 ? unreadCount.toString() : null },
-    { icon: User, label: "👤 প্রোফাইল এডিট", action: () => setIsEditing(true) },
-    { icon: Settings, label: "⚙️ অ্যাকাউন্ট ও পাসওয়ার্ড সেটিংস", path: "/account-settings" },
+    { icon: Package, label: t("myOrders"), path: "/orders" },
+    { icon: Heart, label: t("wishlist"), path: "/wishlist" },
+    { icon: MapPin, label: t("savedAddresses"), path: "/addresses" },
+    { icon: Bell, label: t("notifications"), path: "/notifications", count: unreadCount > 0 ? unreadCount.toString() : null },
+    { icon: User, label: t("editProfile"), action: () => setIsEditing(true) },
+    { icon: Settings, label: t("accountSettings"), path: "/account-settings" },
   ];
 
   const legalMenu = [
-    { icon: Shield, label: "🔒 গোপনীয়তা নীতি", path: "/privacy" },
-    { icon: FileText, label: "📜 শর্তাবলী", path: "/terms" },
-    { icon: LockIcon, label: "🛡️ নিরাপত্তা", path: "/security" },
+    { icon: Shield, label: t("privacyPolicy"), path: "/privacy" },
+    { icon: FileText, label: t("termsAndConditions"), path: "/terms" },
+    { icon: LockIcon, label: t("security"), path: "/security" },
   ];
 
   if (loading) {
@@ -103,14 +105,14 @@ export const Account: React.FC = () => {
           <User className="w-12 h-12 text-gray-300" />
         </div>
         <div className="space-y-2">
-          <h2 className="text-2xl font-bold text-gray-800">অনুগ্রহ করে সাইন ইন করুন</h2>
-          <p className="text-gray-500 max-w-xs mx-auto">আপনার অর্ডার, প্রোফাইল এবং ঠিকানা দেখতে লগইন করুন।</p>
+          <h2 className="text-2xl font-bold text-gray-800">{t("pleaseSignIn")}</h2>
+          <p className="text-gray-500 max-w-xs mx-auto">{t("loginPromptDesc")}</p>
         </div>
         <button 
           onClick={() => navigate("/login")}
           className="bg-[#004b23] text-white font-bold py-4 px-12 rounded-2xl shadow-lg shadow-[#004b23]/20 flex items-center gap-2 transition-transform active:scale-95"
         >
-          লগইন করুন <ChevronRight className="w-5 h-5" />
+          {t("login")} <ChevronRight className="w-5 h-5" />
         </button>
       </div>
     );
@@ -130,10 +132,10 @@ export const Account: React.FC = () => {
               )}
             </div>
             <div className="space-y-1">
-              <h2 className="text-xl font-black text-white">{profile?.displayName || user.displayName || "সম্মানিত গ্রাহক"}</h2>
+              <h2 className="text-xl font-black text-white">{profile?.displayName || user.displayName || t("honoredCustomer")}</h2>
               <div className="flex items-center gap-1.5 text-emerald-100 text-xs font-medium">
                 <Phone className="w-3.5 h-3.5 text-[#ffb703]" />
-                <span>{profile?.phoneNumber || "মোবাইল নম্বর যোগ করা হয়নি"}</span>
+                <span>{profile?.phoneNumber || t("phoneNotAdded")}</span>
               </div>
               <p className="text-white/70 text-[11px]">{user.email}</p>
             </div>
@@ -145,7 +147,7 @@ export const Account: React.FC = () => {
             className="bg-[#ffb703] hover:bg-[#e0a200] text-black font-bold px-3.5 py-2 rounded-xl text-xs shadow-md flex items-center gap-1.5 active:scale-95 transition-all"
           >
             <Edit3 className="w-3.5 h-3.5 stroke-[2.5]" />
-            <span>প্রোফাইল এডিট</span>
+            <span>{t("editProfile")}</span>
           </button>
         </div>
         <div className="absolute -right-10 -bottom-10 w-32 h-32 bg-white/5 rounded-full blur-3xl pointer-events-none"></div>
@@ -168,8 +170,8 @@ export const Account: React.FC = () => {
                   <Edit3 className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black leading-tight">প্রোফাইল আপডেট</h3>
-                  <p className="text-[10px] text-emerald-100 font-medium">আপনার তথ্য পরিবর্তন করুন</p>
+                  <h3 className="text-lg font-black leading-tight">{t("profileUpdate")}</h3>
+                  <p className="text-[10px] text-emerald-100 font-medium">{t("editProfile")}</p>
                 </div>
               </div>
               <button 
@@ -194,7 +196,7 @@ export const Account: React.FC = () => {
 
               <form onSubmit={handleSaveProfile} className="space-y-5">
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-black text-gray-700 ml-1">আপনার নাম (Full Name)</label>
+                  <label className="block text-xs font-black text-gray-700 ml-1">{t("fullNameLabel")}</label>
                   <div className="relative">
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
                       <User className="w-4 h-4" />
@@ -205,13 +207,13 @@ export const Account: React.FC = () => {
                       onChange={(e) => setName(e.target.value)}
                       required
                       className="w-full bg-gray-50 border border-gray-100 px-10 py-3.5 rounded-2xl text-sm font-bold text-gray-900 focus:bg-white focus:ring-2 focus:ring-[#004b23] focus:border-transparent transition-all outline-none"
-                      placeholder="আপনার পূর্ণ নাম লিখুন"
+                      placeholder="Full Name"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-black text-gray-700 ml-1">মোবাইল নম্বর (Phone Number)</label>
+                  <label className="block text-xs font-black text-gray-700 ml-1">{t("phoneLabel")}</label>
                   <div className="relative">
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
                       <Phone className="w-4 h-4" />
@@ -227,7 +229,7 @@ export const Account: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-black text-gray-700 ml-1">প্রোফাইল ছবির লিঙ্ক (Photo URL)</label>
+                  <label className="block text-xs font-black text-gray-700 ml-1">{t("photoUrlLabel")}</label>
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
@@ -249,7 +251,7 @@ export const Account: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-1.5 italic ml-1">* গুগল বা অন্য কোনো সাইট থেকে ছবির লিংক এখানে দিতে পারেন।</p>
+                  <p className="text-[10px] text-gray-400 mt-1.5 italic ml-1">{t("photoUrlNote")}</p>
                 </div>
 
                 <div className="pt-6 flex flex-col gap-3">
@@ -258,7 +260,7 @@ export const Account: React.FC = () => {
                     disabled={saving}
                     className="w-full bg-[#004b23] hover:bg-[#00381a] text-white font-black py-4 rounded-2xl text-sm shadow-xl shadow-[#004b23]/20 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    {saving ? "সংরক্ষণ হচ্ছে..." : "তথ্য আপডেট করুন"}
+                    {saving ? t("saving") : t("updateInfo")}
                     {!saving && <Check className="w-4 h-4" />}
                   </button>
                   <button
@@ -266,7 +268,7 @@ export const Account: React.FC = () => {
                     onClick={() => setIsEditing(false)}
                     className="w-full bg-gray-50 hover:bg-gray-100 text-gray-500 font-bold py-3.5 rounded-2xl text-sm transition-all"
                   >
-                    ফিরে যান
+                    {t("goBack")}
                   </button>
                 </div>
               </form>
@@ -279,7 +281,7 @@ export const Account: React.FC = () => {
       <div className="px-4 space-y-6">
         {/* My Account Section */}
         <div className="space-y-3">
-          <h3 className="px-4 text-[13px] font-black text-gray-400 uppercase tracking-widest">আমার অ্যাকাউন্ট</h3>
+          <h3 className="px-4 text-[13px] font-black text-gray-400 uppercase tracking-widest">{t("myAccount")}</h3>
           <div className="bg-white rounded-[32px] p-2 shadow-sm border border-gray-100 overflow-hidden">
             <div className="divide-y divide-gray-50">
               {accountMenu.map((item, i) => (
@@ -326,7 +328,7 @@ export const Account: React.FC = () => {
 
         {/* Account Security & Danger Zone Section */}
         <div className="space-y-3">
-          <h3 className="px-4 text-[13px] font-black text-gray-400 uppercase tracking-widest">অ্যাকাউন্ট নিয়ন্ত্রণ</h3>
+          <h3 className="px-4 text-[13px] font-black text-gray-400 uppercase tracking-widest">{t("accountControl")}</h3>
           <div className="bg-white rounded-[32px] p-2 shadow-sm border border-gray-100 overflow-hidden">
             <div className="divide-y divide-gray-50">
               <button 
@@ -338,8 +340,8 @@ export const Account: React.FC = () => {
                     <Trash2 className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="font-bold text-red-600 text-sm block">স্থায়ীভাবে অ্যাকাউন্ট মুছে ফেলুন</span>
-                    <span className="text-[11px] text-gray-400 font-medium">আপনার প্রোফাইল ও সমস্ত ডেটা স্থায়ীভাবে ডিলিট করুন</span>
+                    <span className="font-bold text-red-600 text-sm block">{t("deleteAccountTitle")}</span>
+                    <span className="text-[11px] text-gray-400 font-medium">{t("deleteAccountDesc")}</span>
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-red-400 group-hover:translate-x-1 transition-transform" />
@@ -350,7 +352,7 @@ export const Account: React.FC = () => {
 
         {/* Legal & Security Section */}
         <div className="space-y-3">
-          <h3 className="px-4 text-[13px] font-black text-gray-400 uppercase tracking-widest">আইনি ও নিরাপত্তা</h3>
+          <h3 className="px-4 text-[13px] font-black text-gray-400 uppercase tracking-widest">{t("legalSecurity")}</h3>
           <div className="bg-white rounded-[32px] p-2 shadow-sm border border-gray-100 overflow-hidden">
             <div className="divide-y divide-gray-50">
               {legalMenu.map((item, i) => (
@@ -379,7 +381,7 @@ export const Account: React.FC = () => {
           onClick={handleLogout}
           className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 border border-red-100 active:scale-95 transition-all text-sm shadow-sm"
         >
-          <LogOut className="w-4 h-4" /> লগআউট করুন (Logout)
+          <LogOut className="w-4 h-4" /> {t("logoutBtn")}
         </button>
       </div>
 
@@ -395,3 +397,5 @@ export const Account: React.FC = () => {
     </div>
   );
 };
+
+export default Account;
