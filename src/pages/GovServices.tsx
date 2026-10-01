@@ -11,9 +11,12 @@ import { collection, query, orderBy, onSnapshot, where, getDocs, limit } from "f
 import { runSeed, INITIAL_GOV_CATEGORIES, INITIAL_GOV_WEBSITES } from "../scripts/seedGovData";
 import { openExternalUrl } from "../lib/openUrl";
 
+import { useLanguage } from "../context/LanguageContext";
+
 interface GovCategory {
   id: string;
   name: string;
+  nameEn?: string;
   icon: string;
   websiteCount?: number;
 }
@@ -21,8 +24,10 @@ interface GovCategory {
 interface GovWebsite {
   id: string;
   name: string;
+  nameEn?: string;
   url: string;
   description: string;
+  descriptionEn?: string;
   categoryId: string;
   isPopular?: boolean;
 }
@@ -43,6 +48,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 
 export const GovServices: React.FC = () => {
   const navigate = useNavigate();
+  const { t, language } = useLanguage();
   const [searchTerm, setSearchTerm] = useState("");
 
   // Pre-populate initial categories for instant rendering with zero white screen delay
@@ -103,6 +109,7 @@ export const GovServices: React.FC = () => {
           return {
             id: doc.id,
             name: data.name,
+            nameEn: data.nameEn,
             icon: data.icon,
             websiteCount: count
           } as GovCategory;
@@ -123,7 +130,7 @@ export const GovServices: React.FC = () => {
   };
 
   const filteredCategories = categories.filter(cat => 
-    cat.name.toLowerCase().includes(searchTerm.toLowerCase())
+    (language === "en" && cat.nameEn ? cat.nameEn : cat.name).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -133,7 +140,7 @@ export const GovServices: React.FC = () => {
         <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-50 rounded-full transition-colors">
           <ArrowLeft className="w-6 h-6 text-gray-600" />
         </button>
-        <h1 className="text-xl font-black tracking-tight text-[#0f172a]">সরকারি ওয়েবসাইট</h1>
+        <h1 className="text-xl font-black tracking-tight text-[#0f172a]">{t("govServicesTitle")}</h1>
         <div className="ml-auto flex items-center gap-2">
            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
               <Globe className="w-4 h-4 text-emerald-600" />
@@ -147,10 +154,10 @@ export const GovServices: React.FC = () => {
            <div className="absolute top-0 right-0 w-32 h-32 opacity-10 pointer-events-none">
               <Globe className="w-full h-full text-emerald-600" />
            </div>
-           <p className="text-[11px] font-black uppercase tracking-widest text-emerald-600/70">এক জায়গায় সব সরকারি সেবা</p>
-           <h2 className="text-2xl font-black leading-tight text-[#004b23]">সরকারি ওয়েবসাইট<br/>একসাথে</h2>
+           <p className="text-[11px] font-black uppercase tracking-widest text-emerald-600/70">{t("allRightsReserved")}</p>
+           <h2 className="text-2xl font-black leading-tight text-[#004b23]">{t("govServicesHeadline")}</h2>
            <p className="text-xs text-gray-500 leading-relaxed max-w-[80%]">
-              জমি, যানবাহন, লাইসেন্স, শিক্ষা, স্বাস্থ্য, করসহ সব সরকারি সেবা ওয়েবসাইটের লিংক এখানে পাবেন।
+              {t("govServicesDesc")}
            </p>
         </div>
 
@@ -159,7 +166,7 @@ export const GovServices: React.FC = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition-colors w-5 h-5" />
           <input 
             type="text"
-            placeholder="কোন সেবার ওয়েবসাইট খুঁজছেন?"
+            placeholder={t("govSearchPlaceholder")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-white border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-xs"
@@ -169,9 +176,9 @@ export const GovServices: React.FC = () => {
         {/* Categories Section */}
         <div className="space-y-4">
            <div className="flex items-center justify-between px-1">
-              <h3 className="text-lg font-black text-[#0f172a]">ক্যাটাগরি সমূহ</h3>
+              <h3 className="text-lg font-black text-[#0f172a]">{t("govCategories")}</h3>
               <button className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                 সব দেখুন <ChevronRight className="w-4 h-4" />
+                 {t("viewAll")} <ChevronRight className="w-4 h-4" />
               </button>
            </div>
 
@@ -192,8 +199,10 @@ export const GovServices: React.FC = () => {
                        {ICON_MAP[cat.icon] || <Globe className="w-6 h-6" />}
                     </div>
                     <div className="text-center">
-                       <p className="text-[13px] font-black leading-tight text-gray-800">{cat.name}</p>
-                       <p className="text-[10px] text-gray-400 font-medium mt-0.5">{cat.websiteCount || 0} টি সাইট</p>
+                       <p className="text-[13px] font-black leading-tight text-gray-800">
+                         {language === "en" && cat.nameEn ? cat.nameEn : cat.name}
+                       </p>
+                       <p className="text-[10px] text-gray-400 font-medium mt-0.5">{cat.websiteCount || 0} {t("sites")}</p>
                     </div>
                   </motion.div>
                 ))
@@ -204,9 +213,9 @@ export const GovServices: React.FC = () => {
         {/* Popular Websites List */}
         <div className="space-y-4">
            <div className="flex items-center justify-between px-1">
-              <h3 className="text-lg font-black text-[#0f172a]">জনপ্রিয় সরকারি ওয়েবসাইট</h3>
+              <h3 className="text-lg font-black text-[#0f172a]">{t("govPopularSites")}</h3>
               <button className="text-xs font-bold text-emerald-600 flex items-center gap-1">
-                 সব দেখুন <ChevronRight className="w-4 h-4" />
+                 {t("viewAll")} <ChevronRight className="w-4 h-4" />
               </button>
            </div>
 
@@ -222,7 +231,9 @@ export const GovServices: React.FC = () => {
                      <Globe className="w-6 h-6 text-slate-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                     <h4 className="text-sm font-black text-[#0f172a] truncate">{site.name}</h4>
+                     <h4 className="text-sm font-black text-[#0f172a] truncate">
+                       {language === "en" && site.nameEn ? site.nameEn : site.name}
+                     </h4>
                      <p className="text-[11px] text-gray-400 truncate mt-0.5 font-medium">{site.url.replace(/^https?:\/\//, '')}</p>
                   </div>
                   <div className="p-2 text-gray-300">
@@ -236,21 +247,21 @@ export const GovServices: React.FC = () => {
 
       {/* Bottom Nav Mock (Match Reference) */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-6 py-3 flex justify-between items-center z-[60]">
-         <div className="flex flex-col items-center gap-1 opacity-40">
+         <div className="flex flex-col items-center gap-1 opacity-40 cursor-pointer" onClick={() => navigate("/")}>
             <LayoutGrid className="w-6 h-6" />
-            <span className="text-[10px] font-bold">হোম</span>
+            <span className="text-[10px] font-bold">{t("home")}</span>
          </div>
          <div className="flex flex-col items-center gap-1 text-emerald-600">
             <Globe className="w-6 h-6" />
-            <span className="text-[10px] font-bold">সরকারি সেবা</span>
+            <span className="text-[10px] font-bold">{t("govServicesTitle")}</span>
          </div>
-         <div className="flex flex-col items-center gap-1 opacity-40">
+         <div className="flex flex-col items-center gap-1 opacity-40" onClick={() => navigate("/wishlist")}>
             <Heart className="w-6 h-6" />
-            <span className="text-[10px] font-bold">পছন্দের লিংক</span>
+            <span className="text-[10px] font-bold">{t("wishlist")}</span>
          </div>
-         <div className="flex flex-col items-center gap-1 opacity-40">
+         <div className="flex flex-col items-center gap-1 opacity-40" onClick={() => navigate("/account")}>
             <Briefcase className="w-6 h-6" />
-            <span className="text-[10px] font-bold">প্রোফাইল</span>
+            <span className="text-[10px] font-bold">{t("profile")}</span>
          </div>
       </div>
     </div>

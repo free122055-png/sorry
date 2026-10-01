@@ -91,7 +91,32 @@ const translations: Translations = {
   fullNameLabel: { bn: "আপনার নাম (Full Name)", en: "Full Name" },
   phoneLabel: { bn: "মোবাইল নম্বর (Phone Number)", en: "Phone Number" },
   photoUrlLabel: { bn: "প্রোফাইল ছবির লিঙ্ক (Photo URL)", en: "Profile Photo URL" },
-  photoUrlNote: { bn: "* গুগল বা অন্য কোনো সাইট থেকে ছবির লিংক এখানে দিতে পারেন।", en: "* You can provide an image link from Google or any other site." }
+  photoUrlNote: { bn: "* গুগল বা অন্য কোনো সাইট থেকে ছবির লিংক এখানে দিতে পারেন।", en: "* You can provide an image link from Google or any other site." },
+  govServicesTitle: { bn: "সরকারি ওয়েবসাইট", en: "Government Websites" },
+  govServicesHeadline: { bn: "সরকারি ওয়েবসাইট একসাথে", en: "Government Websites Together" },
+  govServicesDesc: { bn: "জমি, যানবাহন, লাইসেন্স, শিক্ষা, স্বাস্থ্য, করসহ সব সরকারি সেবা ওয়েবসাইটের লিংক এখানে পাবেন।", en: "Find links to all government services including land, vehicles, license, education, health, tax etc." },
+  govSearchPlaceholder: { bn: "কোন সেবার ওয়েবসাইট খুঁজছেন?", en: "Which service website are you looking for?" },
+  govCategories: { bn: "ক্যাটাগরি সমূহ", en: "Categories" },
+  govPopularSites: { bn: "জনপ্রিয় সরকারি ওয়েবসাইট", en: "Popular Government Websites" },
+  viewAll: { bn: "সব দেখুন", en: "View All" },
+  visitWebsite: { bn: "ওয়েবসাইট ভিজিট করুন", en: "Visit Website" },
+  sites: { bn: "টি সাইট", en: "Sites" },
+  liveLocationTitle: { bn: "লাইভ লোকেশন শেয়ারিং", en: "Live Location Sharing" },
+  shareLocation: { bn: "লোকেশন শেয়ার করুন", en: "Share Location" },
+  shareLocationDesc: { bn: "আপনার প্রিয়জন বা বন্ধুর লোকেশন দেখতে রিকুয়েস্ট পাঠান", en: "Send request to see your loved one's or friend's location" },
+  searchUser: { bn: "ইউজার সার্চ করুন...", en: "Search users..." },
+  selectUser: { bn: "ইউজার সিলেক্ট করুন", en: "Select user" },
+  sendLocationRequest: { bn: "লোকেশন রিকুয়েস্ট পাঠান", en: "Send Location Request" },
+  requestSent: { bn: "লোকেশন রিকুয়েস্ট পাঠানো হয়েছে", en: "Location Request Sent" },
+  waitingForPermission: { bn: "অনুমতির জন্য অপেক্ষা করা হচ্ছে...", en: "Waiting for permission..." },
+  approveLocationRequest: { bn: "হ্যাঁ, অনুমতি দিন", en: "Yes, Approve" },
+  rejectLocationRequest: { bn: "না, থাক", en: "No, Thanks" },
+  stopSharing: { bn: "লাইভ শেয়ারিং বন্ধ করুন", en: "Stop Live Sharing" },
+  gpsPermissionTitle: { bn: "জিপিএস ও লোকেশন চালু করুন", en: "Turn on GPS & Location" },
+  gpsPermissionDesc: { bn: "প্লে-স্টোর অ্যাপে নিখুঁত রিয়েল-টাইম লোকেশন দেখার জন্য আপনার মোবাইলের GPS Location Permission অন থাকা আবশ্যক।", en: "GPS Location Permission must be ON for accurate real-time location in the Play Store app." },
+  turnOnPermission: { bn: "📍 অনুমতি চালু ও নিশ্চিত করুন", en: "📍 Turn on & Confirm Permission" },
+  downloadApp: { bn: "অফিসিয়াল অ্যাপ ডাউনলোড করুন", en: "Download Official App" },
+  playStore: { bn: "গুগল প্লে-স্টোর", en: "Google Play Store" }
 };
 
 interface LanguageContextType {

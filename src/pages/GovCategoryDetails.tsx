@@ -8,19 +8,25 @@ import { collection, query, where, onSnapshot, doc, getDoc } from "firebase/fire
 import { INITIAL_GOV_CATEGORIES, INITIAL_GOV_WEBSITES } from "../scripts/seedGovData";
 import { openExternalUrl } from "../lib/openUrl";
 
+import { useLanguage } from "../context/LanguageContext";
+
 interface GovWebsite {
   id: string;
   name: string;
+  nameEn?: string;
   url: string;
   description: string;
+  descriptionEn?: string;
   categoryId: string;
 }
 
 export const GovCategoryDetails: React.FC = () => {
   const { categoryId } = useParams();
   const navigate = useNavigate();
+  const { t, language } = useLanguage();
   const [websites, setWebsites] = useState<GovWebsite[]>([]);
   const [categoryName, setCategoryName] = useState("");
+  const [categoryNameEn, setCategoryNameEn] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -51,7 +57,9 @@ export const GovCategoryDetails: React.FC = () => {
       const docRef = doc(db, "gov_categories", categoryId);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        setCategoryName(docSnap.data().name);
+        const data = docSnap.data();
+        setCategoryName(data.name);
+        setCategoryNameEn(data.nameEn || "");
       }
     };
     fetchCategory();
@@ -84,7 +92,7 @@ export const GovCategoryDetails: React.FC = () => {
   };
 
   const filteredWebsites = websites.filter(site => 
-    site.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (language === "en" && site.nameEn ? site.nameEn : site.name).toLowerCase().includes(searchTerm.toLowerCase()) ||
     site.url.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -96,8 +104,10 @@ export const GovCategoryDetails: React.FC = () => {
           <ArrowLeft className="w-6 h-6 text-gray-600" />
         </button>
         <div className="flex-1">
-          <h1 className="text-lg font-black tracking-tight text-[#0f172a] truncate">{categoryName || "সেবা সমূহ"}</h1>
-          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">অফিসিয়াল ওয়েবসাইট ডিরেক্টরি</p>
+          <h1 className="text-lg font-black tracking-tight text-[#0f172a] truncate">
+            {language === "en" && categoryNameEn ? categoryNameEn : (categoryName || t("govCategories"))}
+          </h1>
+          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{t("govServicesTitle")}</p>
         </div>
       </header>
 
@@ -107,7 +117,7 @@ export const GovCategoryDetails: React.FC = () => {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input 
             type="text"
-            placeholder="ওয়েবসাইটের নাম খুঁজছেন?"
+            placeholder={t("govSearchPlaceholder")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-white border border-gray-200 rounded-2xl py-4 pl-12 pr-4 text-sm focus:ring-2 focus:ring-emerald-500/20 shadow-xs transition-all"
@@ -125,7 +135,7 @@ export const GovCategoryDetails: React.FC = () => {
                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto">
                   <Globe className="w-8 h-8 text-gray-200" />
                </div>
-               <p className="text-gray-400 font-bold text-sm italic">এই ক্যাটাগরিতে কোনো ওয়েবসাইট পাওয়া যায়নি</p>
+               <p className="text-gray-400 font-bold text-sm italic">{t("cartEmpty")}</p>
             </div>
           ) : (
             filteredWebsites.map((site) => (
@@ -140,7 +150,9 @@ export const GovCategoryDetails: React.FC = () => {
                       <Globe className="w-6 h-6" />
                    </div>
                    <div className="flex-1 min-w-0">
-                      <h4 className="text-[15px] font-black text-[#0f172a]">{site.name}</h4>
+                      <h4 className="text-[15px] font-black text-[#0f172a]">
+                        {language === "en" && site.nameEn ? site.nameEn : site.name}
+                      </h4>
                       <p className="text-[11px] text-gray-400 font-bold truncate mt-0.5">{site.url.replace(/^https?:\/\//, '')}</p>
                    </div>
                 </div>
@@ -148,16 +160,16 @@ export const GovCategoryDetails: React.FC = () => {
                 <div className="bg-gray-50 rounded-2xl p-4 flex gap-3">
                    <Info className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                    <p className="text-[12px] text-gray-600 leading-relaxed">
-                      {site.description || "এই সেবার অফিসিয়াল ওয়েবসাইটের মাধ্যমে আপনি সরাসরি অনলাইনে আবেদন এবং তথ্য সংগ্রহ করতে পারবেন।"}
+                      {language === "en" && site.descriptionEn ? site.descriptionEn : (site.description || "Official government portal for this service.")}
                    </p>
                 </div>
 
                 <button
-                  onClick={() => handleVisit(site.url)}
+                   onClick={() => handleVisit(site.url)}
                   className="w-full py-3.5 bg-[#004b23] text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/10 active:scale-95 transition-all"
                 >
                   <ExternalLink className="w-4 h-4" />
-                  <span>ওয়েবসাইট ভিজিট করুন</span>
+                  <span>{t("visitWebsite")}</span>
                 </button>
               </motion.div>
             ))

@@ -13,7 +13,10 @@ export interface UserLocationData {
   lastUpdated: any;
 }
 
-let watchId: number | null = null;
+import { Geolocation } from '@capacitor/geolocation';
+import { Capacitor } from '@capacitor/core';
+
+let watchId: string | number | null = null;
 let lastGeocodeTime = 0;
 let cachedAddress = "";
 
@@ -65,67 +68,97 @@ export const getMovementStatus = (speedMetersPerSec: number | null): string => {
 let lastFirestoreWriteTime = 0;
 const MIN_WRITE_INTERVAL_MS = 3000; // Minimum 3 seconds between Firestore location writes
 
-export const startLocationTracking = (userId: string, onUpdate?: (loc: UserLocationData) => void) => {
-  if (!navigator.geolocation) {
+export const startLocationTracking = async (userId: string, onUpdate?: (loc: UserLocationData) => void) => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const permissions = await Geolocation.checkPermissions();
+      if (permissions.location !== 'granted') {
+        const req = await Geolocation.requestPermissions();
+        if (req.location !== 'granted') {
+          console.error("Location permission denied on native device");
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Capacitor permission check warning:", e);
+    }
+  } else if (!navigator.geolocation) {
     console.error("Geolocation is not supported by this browser.");
     return;
   }
 
   if (watchId !== null) {
-    navigator.geolocation.clearWatch(watchId);
+    if (Capacitor.isNativePlatform()) {
+      Geolocation.clearWatch({ id: watchId as string });
+    } else {
+      navigator.geolocation.clearWatch(watchId as number);
+    }
   }
 
-  watchId = navigator.geolocation.watchPosition(
-    async (position) => {
-      const lat = position.coords.latitude;
-      const lon = position.coords.longitude;
-      const speed = position.coords.speed;
-      const movementStatus = getMovementStatus(speed);
+  const handleUpdate = async (position: any) => {
+    const lat = position.coords.latitude;
+    const lon = position.coords.longitude;
+    const speed = position.coords.speed;
+    const movementStatus = getMovementStatus(speed);
 
-      // Async fetch address without blocking coordinates update
-      const addressName = await getAddressFromCoords(lat, lon);
+    // Async fetch address without blocking coordinates update
+    const addressName = await getAddressFromCoords(lat, lon);
 
-      const loc: UserLocationData = {
-        userId,
-        latitude: lat,
-        longitude: lon,
-        speed: position.coords.speed,
-        heading: position.coords.heading,
-        accuracy: position.coords.accuracy,
-        addressName,
-        movementStatus,
-        lastUpdated: serverTimestamp(),
-      };
+    const loc: UserLocationData = {
+      userId,
+      latitude: lat,
+      longitude: lon,
+      speed: position.coords.speed,
+      heading: position.coords.heading,
+      accuracy: position.coords.accuracy,
+      addressName,
+      movementStatus,
+      lastUpdated: serverTimestamp(),
+    };
 
-      // Always update local UI state immediately for 60fps smooth map rendering
-      if (onUpdate) onUpdate(loc);
+    // Always update local UI state immediately for 60fps smooth map rendering
+    if (onUpdate) onUpdate(loc);
 
-      // Throttle Firestore database writes to max once every 3 seconds to prevent [resource-exhausted] write stream error
-      const now = Date.now();
-      if (now - lastFirestoreWriteTime >= MIN_WRITE_INTERVAL_MS) {
-        lastFirestoreWriteTime = now;
-        try {
-          await setDoc(doc(db, "user_locations", userId), loc, { merge: true });
-        } catch (err: any) {
-          console.warn("Throttled location write notice:", err?.message || err);
-        }
+    // Throttle Firestore database writes to max once every 3 seconds to prevent [resource-exhausted] write stream error
+    const now = Date.now();
+    if (now - lastFirestoreWriteTime >= MIN_WRITE_INTERVAL_MS) {
+      lastFirestoreWriteTime = now;
+      try {
+        await setDoc(doc(db, "user_locations", userId), loc, { merge: true });
+      } catch (err: any) {
+        console.warn("Throttled location write notice:", err?.message || err);
       }
-    },
-    (error) => {
-      console.warn("Geolocation tracking warning:", error.message);
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 1000,
     }
-  );
+  };
+
+  const handleError = (error: any) => {
+    console.warn("Geolocation tracking warning:", error.message);
+  };
+
+  const options = {
+    enableHighAccuracy: true,
+    timeout: 15000,
+    maximumAge: 1000,
+  };
+
+  if (Capacitor.isNativePlatform()) {
+    watchId = await Geolocation.watchPosition(options, (pos, err) => {
+      if (err) handleError(err);
+      if (pos) handleUpdate(pos);
+    });
+  } else {
+    watchId = navigator.geolocation.watchPosition(handleUpdate, handleError, options);
+  }
 };
 
 
 export const stopLocationTracking = () => {
   if (watchId !== null) {
-    navigator.geolocation.clearWatch(watchId);
+    if (Capacitor.isNativePlatform()) {
+      Geolocation.clearWatch({ id: watchId as string });
+    } else {
+      navigator.geolocation.clearWatch(watchId as number);
+    }
     watchId = null;
   }
 };

@@ -22,7 +22,9 @@ import {
   CheckCircle2,
   Save,
   Send,
-  BookOpen
+  BookOpen,
+  Smartphone,
+  ExternalLink
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../context/AuthContext";
@@ -530,6 +532,25 @@ export const MenuDrawer: React.FC<MenuDrawerProps> = ({ isOpen, onClose }) => {
                     </div>
                     <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-blue-700 group-hover:translate-x-0.5 transition-all" />
                   </button>
+
+                  {/* অ্যাপ ডাউনলোড */}
+                  <a
+                    href="https://play.google.com/store/apps/details?id=com.dailyinternetoffer.bd"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-amber-50/50 text-gray-800 font-bold transition-colors text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-105 transition-transform">
+                        <Smartphone className="w-4 h-4 stroke-[2.2]" />
+                      </div>
+                      <div>
+                        <span className="group-hover:text-amber-600 transition-colors block leading-tight">{t("downloadApp")}</span>
+                        <span className="text-[10px] text-gray-400 font-medium">{t("playStore")}</span>
+                      </div>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-gray-300 group-hover:text-amber-600 transition-all" />
+                  </a>
 
                 </div>
               </div>

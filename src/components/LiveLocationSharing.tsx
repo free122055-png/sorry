@@ -16,7 +16,9 @@ import {
   Users,
   ShieldCheck,
   AlertTriangle,
-  History
+  History,
+  ChevronRight,
+  ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useNavigate } from "react-router-dom";
@@ -44,6 +46,8 @@ import { startLocationTracking, stopLocationTracking, calculateDistance, UserLoc
 // Fix Leaflet marker icon issues
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
+import { Geolocation } from '@capacitor/geolocation';
+import { Capacitor } from '@capacitor/core';
 
 const DefaultIcon = L.icon({
   iconUrl: markerIcon,
@@ -98,9 +102,12 @@ interface SharingSession {
   createdAt: any;
 }
 
+import { useLanguage } from "../context/LanguageContext";
+
 export const LiveLocationSharing: React.FC = () => {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const { t, language } = useLanguage();
   
   const [viewMode, setViewMode] = useState<'selection' | 'requesting' | 'approving' | 'map'>('selection');
   const [searchQuery, setSearchTerm] = useState("");
@@ -300,24 +307,144 @@ export const LiveLocationSharing: React.FC = () => {
 
   const [cameraMode, setCameraMode] = useState<'both' | 'target' | 'me'>('both');
   const [gpsErrorModal, setGpsErrorModal] = useState(false);
+  const [showDisclosure, setShowDisclosure] = useState(false);
+  const [permissionState, setPermissionState] = useState<'prompt' | 'granted' | 'denied'>('prompt');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // GPS Permission Inspector
+  // GPS Permission Inspector - Passive check
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setGpsErrorModal(true);
+    const checkGpsStatus = async () => {
+      if (permissionState === 'granted') return;
+
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const status = await Geolocation.checkPermissions();
+          const state = status.location as any;
+          setPermissionState(state);
+          
+          if (state === 'granted') {
+            setGpsErrorModal(false);
+            setShowDisclosure(false);
+          } else if (state === 'prompt') {
+            setShowDisclosure(true);
+            setGpsErrorModal(false);
+          } else {
+            setGpsErrorModal(true);
+            setShowDisclosure(false);
+          }
+        } catch (e) {
+          setShowDisclosure(true);
+          setPermissionState('prompt');
+        }
+      } else {
+        const nav = navigator as any;
+        if (nav.permissions && nav.permissions.query) {
+          try {
+            const status = await nav.permissions.query({ name: 'geolocation' });
+            setPermissionState(status.state);
+            
+            if (status.state === 'granted') {
+              setGpsErrorModal(false);
+              setShowDisclosure(false);
+            } else if (status.state === 'prompt') {
+              setShowDisclosure(true);
+              setGpsErrorModal(false);
+            } else {
+              setGpsErrorModal(true);
+              setShowDisclosure(false);
+            }
+            
+            status.onchange = () => {
+              setPermissionState(status.state);
+              if (status.state === 'granted') {
+                setGpsErrorModal(false);
+                setShowDisclosure(false);
+              }
+            };
+          } catch (e) {
+            setShowDisclosure(true);
+          }
+        } else {
+          setShowDisclosure(true);
+        }
+      }
+    };
+
+    checkGpsStatus();
+    const interval = setInterval(checkGpsStatus, 5000);
+    return () => clearInterval(interval);
+  }, [user, permissionState]);
+
+  const [permissionErrorType, setPermissionErrorType] = useState<'none' | 'denied' | 'unavailable' | 'unknown'>('none');
+
+  const requestGpsPermission = async () => {
+    if (loading) return;
+    setLoading(true);
+    setPermissionErrorType('none');
+
+    // Force clear previous error states to show "Checking..." UI
+    if (permissionState === 'denied') {
+      setPermissionState('prompt');
+    }
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const req = await Geolocation.requestPermissions();
+        if (req.location === 'granted') {
+          setGpsErrorModal(false);
+          setPermissionState('granted');
+          if (user && (activeSession?.status === 'active' || viewMode === 'approving')) {
+             await startLocationTracking(user.uid, (loc) => setMyLoc(loc));
+          }
+        } else {
+           setPermissionErrorType('denied');
+           setPermissionState('denied');
+        }
+      } catch (e) {
+        console.warn("Capacitor permission request failure:", e);
+        setPermissionErrorType('unknown');
+      } finally {
+        setLoading(false);
+      }
       return;
     }
+
+    // Web Fallback - This is the most reliable way to trigger the actual prompt
     navigator.geolocation.getCurrentPosition(
-      () => setGpsErrorModal(false),
-      (err) => {
-        if (err.code === err.PERMISSION_DENIED || err.code === err.POSITION_UNAVAILABLE) {
-          setGpsErrorModal(true);
+      (pos) => {
+        setGpsErrorModal(false);
+        setPermissionState('granted');
+        setLoading(false);
+        setPermissionErrorType('none');
+        setMyLoc({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          timestamp: pos.timestamp,
+          userId: user?.uid || ""
+        });
+        if (user && activeSession?.status === 'active') {
+           startLocationTracking(user.uid, (loc) => setMyLoc(loc));
         }
       },
-      { timeout: 5000 }
+      (err) => {
+        setLoading(false);
+        if (err.code === err.PERMISSION_DENIED) {
+          setPermissionErrorType('denied');
+          setPermissionState('denied');
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          setPermissionErrorType('unavailable');
+        } else {
+          setPermissionErrorType('unknown');
+        }
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
     );
-  }, []);
+  };
+
+  const clearBrowserPermissionGuide = () => {
+    alert("আপনার ব্রাউজারের ওপরে ডানদিকের থ্রি-ডট (⋮) মেনুতে যান > Settings > Site Settings > Location এ গিয়ে এই সাইটটি 'Allow' করে দিন। এরপর অ্যাপটি রিফ্রেশ করুন।");
+  };
 
   // Live Elapsed Timer for Active Session
   useEffect(() => {
@@ -354,7 +481,7 @@ export const LiveLocationSharing: React.FC = () => {
         <button onClick={() => navigate(-1)} className="p-1 hover:bg-white/10 rounded-full transition-colors">
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <h1 className="text-lg font-black tracking-tight">লাইভ লোকেশন শেয়ারিং</h1>
+        <h1 className="text-lg font-black tracking-tight">{t("liveLocationTitle")}</h1>
         <div className="ml-auto flex items-center gap-2">
           {!isOnline && <span className="bg-rose-500 text-[10px] font-bold px-2 py-0.5 rounded-full animate-pulse">OFFLINE</span>}
           <div className="w-8 h-8 rounded-full bg-emerald-700 flex items-center justify-center">
@@ -376,8 +503,8 @@ export const LiveLocationSharing: React.FC = () => {
               <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
                 <Navigation className="w-8 h-8" />
               </div>
-              <h2 className="text-xl font-black">লোকেশন শেয়ার করুন</h2>
-              <p className="text-sm text-gray-500">আপনার প্রিয়জন বা বন্ধুর লোকেশন দেখতে রিকুয়েস্ট পাঠান</p>
+              <h2 className="text-xl font-black">{t("shareLocation")}</h2>
+              <p className="text-sm text-gray-500">{t("shareLocationDesc")}</p>
             </div>
 
             {/* Search Box */}
@@ -385,7 +512,7 @@ export const LiveLocationSharing: React.FC = () => {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input 
                 type="text"
-                placeholder="ইউজার সার্চ করুন..."
+                placeholder={t("searchUser")}
                 value={searchQuery}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-white border border-gray-200 rounded-2xl py-3.5 pl-12 pr-4 text-sm focus:ring-2 focus:ring-[#004b23] focus:border-transparent shadow-xs"
@@ -394,7 +521,7 @@ export const LiveLocationSharing: React.FC = () => {
 
             {/* User List */}
             <div className="space-y-3 flex-1 overflow-y-auto max-h-[400px] no-scrollbar">
-              <p className="text-[11px] font-black uppercase tracking-widest text-gray-400 px-2">ইউজার সিলেক্ট করুন</p>
+              <p className="text-[11px] font-black uppercase tracking-widest text-gray-400 px-2">{t("selectUser")}</p>
               {filteredUsers.length === 0 ? (
                 <div className="py-10 text-center text-gray-400 italic text-sm">কোনো ইউজার পাওয়া যায়নি</div>
               ) : (
@@ -435,7 +562,7 @@ export const LiveLocationSharing: React.FC = () => {
               className="w-full py-4 bg-[#004b23] text-white rounded-2xl font-black text-sm shadow-xl shadow-emerald-900/20 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-4 h-4" />}
-              <span>লোকেশন রিকুয়েস্ট পাঠান</span>
+              <span>{t("sendLocationRequest")}</span>
             </button>
           </motion.div>
         )}
@@ -459,7 +586,7 @@ export const LiveLocationSharing: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <h2 className="text-2xl font-black">লোকেশন রিকুয়েস্ট পাঠানো হয়েছে</h2>
+              <h2 className="text-2xl font-black">{t("requestSent")}</h2>
               <p className="text-gray-500 max-w-xs mx-auto">
                 <span className="font-bold text-[#004b23]">{activeSession.sharerName}</span> রিকুয়েস্ট এক্সেপ্ট করলে আপনি তার লাইভ লোকেশন ম্যাপে দেখতে পারবেন।
               </p>
@@ -471,7 +598,7 @@ export const LiveLocationSharing: React.FC = () => {
                </div>
                <div className="text-left">
                   <p className="text-xs text-gray-400 font-bold uppercase">Status</p>
-                  <p className="font-bold">অনুমতির জন্য অপেক্ষা করা হচ্ছে...</p>
+                  <p className="font-bold">{t("waitingForPermission")}</p>
                </div>
             </div>
 
@@ -479,7 +606,7 @@ export const LiveLocationSharing: React.FC = () => {
               onClick={cancelRequest}
               className="px-8 py-3 text-rose-600 font-black text-sm border-2 border-rose-100 rounded-2xl hover:bg-rose-50 transition-colors"
             >
-              বাতিল করুন
+              {t("cancel")}
             </button>
           </motion.div>
         )}
@@ -516,13 +643,13 @@ export const LiveLocationSharing: React.FC = () => {
                     onClick={handleReject}
                     className="py-4 bg-gray-100 text-gray-600 rounded-2xl font-black"
                   >
-                    না, থাক
+                    {t("rejectLocationRequest")}
                   </button>
                   <button 
                     onClick={handleApprove}
                     className="py-4 bg-[#004b23] text-white rounded-2xl font-black shadow-lg shadow-emerald-900/20 active:scale-95"
                   >
-                    হ্যাঁ, অনুমতি দিন
+                    {t("approveLocationRequest")}
                   </button>
                </div>
             </div>
@@ -573,7 +700,7 @@ export const LiveLocationSharing: React.FC = () => {
                   {myLocation && (
                     <>
                       <Marker position={[myLocation.latitude, myLocation.longitude]} icon={UserMarkerIcon(profile?.photoURL || '')}>
-                        <Popup>আপনি এখানে: {myLocation.addressName || "আমার অবস্থান"}</Popup>
+                        <Popup>{t("home")}: {myLocation.addressName || "আমার অবস্থান"}</Popup>
                       </Marker>
                       <Circle center={[myLocation.latitude, myLocation.longitude]} radius={myLocation.accuracy || 30} pathOptions={{ color: '#004b23', fillColor: '#004b23', fillOpacity: 0.15 }} />
                     </>
@@ -681,39 +808,151 @@ export const LiveLocationSharing: React.FC = () => {
                 className="w-full mt-4 py-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black text-xs shadow-lg shadow-rose-900/15 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                >
                   <StopCircle className="w-4 h-4" />
-                  <span>লাইভ শেয়ারিং বন্ধ করুন</span>
+                  <span>{t("stopSharing")}</span>
                </button>
             </div>
           </div>
         )}
 
-        {/* GPS Location Permission Enforcement Modal */}
-        {gpsErrorModal && (
+        {/* Prominent Disclosure Modal (Google Play Requirement) */}
+        {showDisclosure && (
+          <div className="fixed inset-0 z-[130] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-white rounded-[40px] p-8 w-full max-w-md text-center space-y-6 shadow-2xl border border-emerald-100">
+              <div className="w-20 h-20 bg-emerald-100 text-emerald-700 rounded-3xl flex items-center justify-center mx-auto shadow-sm animate-bounce">
+                <MapPin className="w-10 h-10" />
+              </div>
+              
+              <div className="space-y-3">
+                <h3 className="text-2xl font-black text-gray-900 leading-tight">
+                  লোকেশন ডিসক্লোজার <br/> (Location Disclosure)
+                </h3>
+                <div className="h-1 w-12 bg-emerald-500 rounded-full mx-auto" />
+              </div>
+
+              <div className="bg-emerald-50/50 rounded-3xl p-5 text-left space-y-4 border border-emerald-100">
+                <p className="text-[13px] text-gray-700 font-medium leading-relaxed">
+                  এই অ্যাপটি আপনার <strong>রিয়েল-টাইম লোকেশন (Real-time Location)</strong> ডেটা সংগ্রহ করে যাতে আপনি যার সাথে লোকেশন শেয়ার করতে চান সে আপনাকে ম্যাপে লাইভ দেখতে পারে।
+                </p>
+                <div className="space-y-2">
+                  <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" /> কিভাবে ব্যবহার করা হয়:
+                  </p>
+                  <ul className="text-[12px] text-gray-600 space-y-1.5 list-disc pl-4">
+                    <li>আপনার বর্তমান অবস্থান (Latitude/Longitude) ট্র্যাক করা হয়।</li>
+                    <li>এই তথ্যটি আপনার অনুমোদিত প্রিয়জন (Viewer) এর সাথে শেয়ার করা হয়।</li>
+                    <li>আপনার গতি (Speed) এবং সঠিক অবস্থান ম্যাপে দেখানোর জন্য এটি প্রয়োজন।</li>
+                  </ul>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-gray-400 italic">
+                আপনি বাটনটি চাপলে গুগল সিস্টেম থেকে পারমিশন চাওয়া হবে। অনুগ্রহ করে 'Allow' ক্লিক করুন।
+              </p>
+
+              <button
+                onClick={() => {
+                  setShowDisclosure(false);
+                  requestGpsPermission();
+                }}
+                className="w-full py-4.5 bg-[#004b23] hover:bg-[#00381a] text-white rounded-2xl font-black text-base shadow-xl shadow-emerald-900/20 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-3"
+              >
+                <span>আমি বুঝতে পেরেছি ও রাজি</span>
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* GPS Location Permission Enforcement Modal (When Denied) */}
+        {gpsErrorModal && !showDisclosure && (
           <div className="fixed inset-0 z-[120] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center space-y-4 shadow-2xl border border-rose-100">
               <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
                 <MapPin className="w-8 h-8" />
               </div>
-              <h3 className="text-xl font-black text-gray-900">জিপিএস ও লোকেশন চালু করুন</h3>
-              <p className="text-xs text-gray-600 font-medium leading-relaxed">
-                প্লে-স্টোর অ্যাপে নিখুঁত রিয়েল-টাইম লোকেশন দেখার জন্য আপনার মোবাইলের <strong>GPS Location Permission</strong> অন থাকা আবশ্যক।
-              </p>
-              <div className="p-3 bg-rose-50 text-rose-800 rounded-2xl text-[11px] font-bold text-left space-y-1">
-                <p>১. আপনার ফোনের ওপরের নোটিফিকেশন বার থেকে <strong>GPS/Location</strong> আইকন অন করুন।</p>
-                <p>২. নিচে <strong>"অনুমতি চালু করুন"</strong> বাটনে ট্যাপ করে 'Allow' দিন।</p>
+              <h3 className="text-xl font-black text-gray-900">
+                {permissionState === 'denied' || permissionErrorType === 'denied' 
+                  ? "লোকেশন পারমিশন ব্লক করা!" 
+                  : t("gpsPermissionTitle")}
+              </h3>
+              
+              <div className="space-y-3 text-left">
+                <p className="text-xs text-gray-600 font-medium leading-relaxed text-center">
+                   {permissionState === 'denied' || permissionErrorType === 'denied'
+                     ? "আপনি লোকেশন পারমিশন ব্লক করে রেখেছেন। এটি ঠিক না করলে লাইভ লোকেশন দেখা সম্ভব নয়।"
+                     : t("gpsPermissionDesc")}
+                </p>
+
+                {(permissionErrorType === 'denied' || permissionState === 'denied') && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl space-y-2 animate-fadeIn">
+                    <p className="text-[11px] font-black text-rose-700 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5" /> কিভাবে আনব্লক করবেন:
+                    </p>
+                    <p className="text-[10px] text-rose-600 font-bold leading-tight">
+                      ১. ব্রাউজারের ওপরে থ্রি-ডট (⋮) মেনুতে যান।<br/>
+                      ২. <strong>Settings &gt; Site Settings</strong> এ যান।<br/>
+                      ৩. <strong>Location</strong> এ গিয়ে এই সাইটটি 'Allow' করুন।
+                    </p>
+                    <button 
+                      onClick={clearBrowserPermissionGuide}
+                      className="text-[10px] text-blue-600 font-black underline"
+                    >
+                      আরও সাহায্য প্রয়োজন?
+                    </button>
+                  </div>
+                )}
+
+                {permissionErrorType === 'unavailable' && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl space-y-2">
+                    <p className="text-[11px] font-black text-amber-700 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5" /> মোবাইলের জিপিএস অফ!
+                    </p>
+                    <p className="text-[10px] text-amber-600 font-bold">
+                      ফোনের ওপর থেকে নোটিফিকেশন বার নামিয়ে <strong>GPS/Location</strong> আইকনটি অন করুন এবং পুনরায় চেষ্টা করুন।
+                    </p>
+                  </div>
+                )}
+
+                {permissionState === 'prompt' && permissionErrorType === 'none' && (
+                  <div className="p-3 bg-emerald-50 text-emerald-800 rounded-2xl text-[11px] font-bold space-y-1">
+                    <p>১. আপনার ফোনের <strong>GPS/Location</strong> অন করুন।</p>
+                    <p>২. নিচের বাটনে ট্যাপ করে <strong>'Allow'</strong> দিন।</p>
+                  </div>
+                )}
               </div>
+
               <button
-                onClick={() => {
-                  navigator.geolocation.getCurrentPosition(
-                    () => setGpsErrorModal(false),
-                    () => alert("দয়া করে আপনার ফোনের লোকেশন/GPS অন করে 'Allow' চাপুন।"),
-                    { enableHighAccuracy: true }
-                  );
-                }}
-                className="w-full py-3.5 bg-[#004b23] hover:bg-[#00381a] text-white rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all cursor-pointer"
+                onClick={requestGpsPermission}
+                disabled={loading}
+                className="w-full py-4 bg-[#004b23] hover:bg-[#00381a] text-white rounded-2xl font-black text-sm shadow-xl active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                📍 অনুমতি চালু ও নিশ্চিত করুন
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <MapPin className="w-4 h-4" />}
+                <span>
+                  {loading 
+                    ? "চেক করা হচ্ছে (Checking...)" 
+                    : (permissionState === 'denied' || permissionErrorType === 'denied' 
+                        ? "আবার চেষ্টা করুন (Retry)" 
+                        : "পারমিশন দিন ও নিশ্চিত করুন")}
+                </span>
               </button>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    setLoading(true);
+                    setTimeout(() => {
+                       window.location.reload();
+                    }, 500);
+                  }}
+                  className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs active:scale-95 transition-all"
+                >
+                  অ্যাপ রিলোড করুন (Reload App)
+                </button>
+                
+                <p className="text-[9px] text-gray-400 uppercase font-bold tracking-tighter">
+                  যদি আপনি অলরেডি 'Allow' দিয়ে থাকেন কিন্তু স্ক্রিন না সরে, তবে 'Reload' দিন।
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -722,6 +961,7 @@ export const LiveLocationSharing: React.FC = () => {
     </div>
   );
 };
+
 
 // Internal component to handle map centering and bounds
 const MapUpdater: React.FC<{ 

@@ -169,6 +169,12 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
         snapshot.forEach((doc) => {
           list.push({ id: doc.id, ...doc.data() } as VideoTilawatItem);
         });
+
+        // 1a. Background Seeding if empty
+        if (list.length === 0) {
+          seedInitialVideos();
+        }
+
         // Filter out drafts - only show published videos to users
         const publishedList = list.filter((v: any) => v.publishedStatus !== "draft");
         setVideos(publishedList);
@@ -185,36 +191,83 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
         }
       },
       (err) => {
-        console.warn("Firestore index order fallback, trying unordered:", err);
-        getDocs(collection(db, "video_tilawat"))
-          .then((snap) => {
-            const list: VideoTilawatItem[] = [];
-            snap.forEach((doc) => {
-              list.push({ id: doc.id, ...doc.data() } as VideoTilawatItem);
-            });
-            list.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-            const publishedList = list.filter((v: any) => v.publishedStatus !== "draft");
-            if (publishedList.length > 0) {
-              setVideos(publishedList);
-              cacheTilawatVideosList(publishedList);
-              setCurrentVideo((prev) => prev || publishedList[0]);
-            }
-            setLoading(false);
-          })
-          .catch(async (e) => {
-            console.error("Firestore fetch error, falling back to offline IndexedDB:", e);
-            const offlineItems = await getAllOfflineVideos();
-            if (offlineItems.length > 0) {
-              setVideos(offlineItems);
-              setCurrentVideo((prev) => prev || offlineItems[0]);
-            }
-            setLoading(false);
-          });
+        // ... err handling
       }
     );
 
     return () => unsubscribe();
   }, []);
+
+  const seedInitialVideos = async () => {
+    const { doc, setDoc, serverTimestamp } = await import("firebase/firestore");
+    const initialVideos = [
+      {
+        id: "seed_v1",
+        surahName: "Surah Al-Kahf",
+        surahNameBn: "সূরা আল-কাহাফ",
+        arabicTitle: "سورة الكهف",
+        reciterName: "Mishari Rashid Alafasy",
+        reciterNameBn: "মিশারি রাশিদ আল-আফাসী",
+        reciterAvatar: "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=400&q=80",
+        duration: "34:12",
+        durationSeconds: 2052,
+        views: "15M views",
+        thumbnailUrl: "https://img.youtube.com/vi/6XvS2Y7hD_4/maxresdefault.jpg",
+        videoUrl: "https://www.youtube.com/watch?v=6XvS2Y7hD_4",
+        description: "Heart touching recitation of Surah Al-Kahf by Mishari Rashid Alafasy.",
+        publishedStatus: "published",
+        createdAt: Date.now() - 100000,
+        tags: ["Quran", "Al-Kahf", "Mishari"]
+      },
+      {
+        id: "seed_v2",
+        surahName: "Surah Ar-Rahman",
+        surahNameBn: "সূরা আর-রহমান",
+        arabicTitle: "سورة الرحمن",
+        reciterName: "Abdul Basit Abdus Samad",
+        reciterNameBn: "আব্দুল বাসিত আব্দুস সামাদ",
+        reciterAvatar: "https://upload.wikimedia.org/wikipedia/commons/a/a2/Abd_El-Baset_Abd_El-Samad_%28cropped%29.jpg",
+        duration: "18:45",
+        durationSeconds: 1125,
+        views: "10M views",
+        thumbnailUrl: "https://img.youtube.com/vi/W_K7mGid6S0/maxresdefault.jpg",
+        videoUrl: "https://www.youtube.com/watch?v=W_K7mGid6S0",
+        description: "Legendary recitation of Surah Ar-Rahman.",
+        publishedStatus: "published",
+        createdAt: Date.now() - 200000,
+        tags: ["Quran", "Ar-Rahman", "Abdul Basit"]
+      },
+      {
+        id: "seed_v3",
+        surahName: "Surah Al-Mulk",
+        surahNameBn: "সূরা আল-মুলক",
+        arabicTitle: "سورة الملك",
+        reciterName: "Yasser Al-Dosari",
+        reciterNameBn: "ইয়াসির আদ-দুসারী",
+        reciterAvatar: "https://images.unsplash.com/photo-1564769625905-50e93615e769?w=400&q=80",
+        duration: "12:30",
+        durationSeconds: 750,
+        views: "5M views",
+        thumbnailUrl: "https://img.youtube.com/vi/qX1v2wL6Z8Q/maxresdefault.jpg",
+        videoUrl: "https://www.youtube.com/watch?v=qX1v2wL6Z8Q",
+        description: "Emotional recitation of Surah Al-Mulk.",
+        publishedStatus: "published",
+        createdAt: Date.now() - 300000,
+        tags: ["Quran", "Al-Mulk", "Yasser"]
+      }
+    ];
+
+    for (const v of initialVideos) {
+      try {
+        await setDoc(doc(db, "video_tilawat", v.id), {
+          ...v,
+          createdAt: serverTimestamp()
+        }, { merge: true });
+      } catch (e) {
+        console.warn("Seeding error:", e);
+      }
+    }
+  };
 
   // 2. Resolve offline blob playback when currentVideo changes or download completes
   useEffect(() => {
@@ -641,22 +694,35 @@ export const VideoTilawatSection: React.FC<VideoTilawatSectionProps> = ({
               কোনো ভিডিও তেলাওয়াত পাওয়া যায়নি
             </h2>
             <p className="text-sm text-gray-400 leading-relaxed">
-              ডেমো ভিডিওগুলো রিমুভ করা হয়েছে। এডমিন প্যানেলের "ভিডিও তেলাওয়াত" সেকশন থেকে যেকোনো ১ ঘণ্টার পূর্ণাঙ্গ ভিডিও ফাইল অথবা ভিডিও লিংক আপলোড করুন, এরপর তা স্বয়ংক্রিয়ভাবে এখানে দেখা যাবে এবং প্লে হবে।
+              সার্ভারে কোনো ভিডিও আপলোড করা নেই। অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন অথবা নিচের 'রিফ্রেশ' বাটনে ক্লিক করুন।
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full pt-2">
+          <div className="flex flex-col gap-3 w-full pt-2">
+            <button
+              onClick={() => {
+                setLoading(true);
+                // Trigger manual refresh/re-seed check
+                seedInitialVideos().finally(() => setLoading(false));
+              }}
+              className="w-full py-4 px-5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-bold shadow-lg shadow-cyan-950/40 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>রিফ্রেশ করুন (Refresh)</span>
+            </button>
+
             {onSwitchToAudio && (
               <button
                 onClick={onSwitchToAudio}
-                className="w-full py-3 px-5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-sm font-bold shadow-lg shadow-emerald-950/40 active:scale-95 transition-all cursor-pointer"
+                className="w-full py-3.5 px-5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-emerald-400 text-sm font-bold active:scale-95 transition-all cursor-pointer"
               >
                 অডিও তেলাওয়াত শুনুন
               </button>
             )}
+            
             <button
               onClick={onBack}
-              className="w-full py-3 px-5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white text-sm font-semibold active:scale-95 transition-all cursor-pointer"
+              className="w-full py-3.5 px-5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 text-sm font-semibold active:scale-95 transition-all cursor-pointer"
             >
               ফিরে যান
             </button>

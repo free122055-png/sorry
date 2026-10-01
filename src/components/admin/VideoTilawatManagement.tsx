@@ -684,6 +684,80 @@ export const VideoTilawatManagement: React.FC = () => {
     setTagsInput("সূরা আল-ফাতিহা, মিশারি রাশিদ, ভিডিও তেলাওয়াত, Quran HD");
   };
 
+  const handleSeedInitialVideos = async () => {
+    setLoading(true);
+    try {
+      const initialVideos = [
+        {
+          id: "seed_v1",
+          surahName: "Surah Al-Kahf",
+          surahNameBn: "সূরা আল-কাহাফ",
+          arabicTitle: "سورة الكهف",
+          reciterName: "Mishari Rashid Alafasy",
+          reciterNameBn: "মিশারি রাশিদ আল-আফাসী",
+          reciterAvatar: "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?w=400&q=80",
+          duration: "34:12",
+          durationSeconds: 2052,
+          views: "15M views",
+          thumbnailUrl: "https://img.youtube.com/vi/6XvS2Y7hD_4/maxresdefault.jpg",
+          videoUrl: "https://www.youtube.com/watch?v=6XvS2Y7hD_4",
+          description: "Heart touching recitation of Surah Al-Kahf by Mishari Rashid Alafasy.",
+          publishedStatus: "published",
+          createdAt: Date.now() - 100000,
+          tags: ["Quran", "Al-Kahf", "Mishari"]
+        },
+        {
+          id: "seed_v2",
+          surahName: "Surah Ar-Rahman",
+          surahNameBn: "সূরা আর-রহমান",
+          arabicTitle: "سورة الرحمن",
+          reciterName: "Abdul Basit Abdus Samad",
+          reciterNameBn: "আব্দুল বাসিত আব্দুস সামাদ",
+          reciterAvatar: "https://upload.wikimedia.org/wikipedia/commons/a/a2/Abd_El-Baset_Abd_El-Samad_%28cropped%29.jpg",
+          duration: "18:45",
+          durationSeconds: 1125,
+          views: "10M views",
+          thumbnailUrl: "https://img.youtube.com/vi/W_K7mGid6S0/maxresdefault.jpg",
+          videoUrl: "https://www.youtube.com/watch?v=W_K7mGid6S0",
+          description: "Legendary recitation of Surah Ar-Rahman.",
+          publishedStatus: "published",
+          createdAt: Date.now() - 200000,
+          tags: ["Quran", "Ar-Rahman", "Abdul Basit"]
+        },
+        {
+          id: "seed_v3",
+          surahName: "Surah Al-Mulk",
+          surahNameBn: "সূরা আল-মুলক",
+          arabicTitle: "سورة الملك",
+          reciterName: "Yasser Al-Dosari",
+          reciterNameBn: "ইয়াসির আদ-দুসারী",
+          reciterAvatar: "https://images.unsplash.com/photo-1564769625905-50e93615e769?w=400&q=80",
+          duration: "12:30",
+          durationSeconds: 750,
+          views: "5M views",
+          thumbnailUrl: "https://img.youtube.com/vi/qX1v2wL6Z8Q/maxresdefault.jpg",
+          videoUrl: "https://www.youtube.com/watch?v=qX1v2wL6Z8Q",
+          description: "Emotional recitation of Surah Al-Mulk.",
+          publishedStatus: "published",
+          createdAt: Date.now() - 300000,
+          tags: ["Quran", "Al-Mulk", "Yasser"]
+        }
+      ];
+
+      for (const v of initialVideos) {
+        await setDoc(doc(db, "video_tilawat", v.id), {
+          ...v,
+          updatedAt: Date.now()
+        }, { merge: true });
+      }
+      showToast("সেম্পল ভিডিও ডেটা সফলভাবে রিকোভার করা হয়েছে!");
+    } catch (err: any) {
+      showToast("ডেটা রিকভারি ব্যর্থ হয়েছে", true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleOpenAddModal = () => {
     resetForm();
     setIsModalOpen(true);
@@ -798,13 +872,24 @@ export const VideoTilawatManagement: React.FC = () => {
         </div>
 
         {/* Primary Action Button */}
-        <button
-          onClick={handleOpenAddModal}
-          className="w-full md:w-auto px-6 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-black text-sm rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-        >
-          <Upload className="w-5 h-5 stroke-[2.5]" />
-          <span>গ্যালারি থেকে নতুন ভিডিও আপলোড</span>
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto shrink-0">
+          <button
+            onClick={handleSeedInitialVideos}
+            className="px-4 py-3.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-2xl border border-white/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            title="সেম্পল ভিডিও ডেটা রিকোভার করুন"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>ডেটা রিকোভারি</span>
+          </button>
+          
+          <button
+            onClick={handleOpenAddModal}
+            className="px-6 py-3.5 bg-emerald-500 hover:bg-emerald-400 text-gray-950 font-black text-sm rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Upload className="w-5 h-5 stroke-[2.5]" />
+            <span>গ্যালারি থেকে ভিডিও আপলোড</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Summary Bar */}
