@@ -4,10 +4,14 @@ import {
   Grid, Film, UserCheck, Bot, Sparkles, 
   Share2, Edit3, Heart, Eye, Bookmark, Layers, LayoutGrid, 
   Trash2, Camera, Upload, CheckCircle2, ShieldCheck, 
-  Crown, MapPin, Globe, QrCode, Copy, Check, Users, MessageSquare
+  Crown, MapPin, Globe, QrCode, Copy, Check, Users, MessageSquare,
+  Home, User, UserPlus, Video, Bell, UserGroup, Radio, Settings,
+  Shield, HelpCircle, LogOut, Search, MessageCircle, Volume2,
+  VolumeX, Moon, Sun, Lock, Key, AlertCircle, RefreshCw, Send
 } from "lucide-react";
 import { InstagramPost, InstagramReel, InstagramHighlight } from "../../types/instagram";
 import { uploadImageFile } from "../../lib/uploadService";
+import { InstagramTab } from "./InstagramBottomNav";
 
 interface InstagramProfileProps {
   displayName?: string;
@@ -24,12 +28,16 @@ interface InstagramProfileProps {
   posts?: InstagramPost[];
   reels?: InstagramReel[];
   highlights?: InstagramHighlight[];
+  allUsers?: any[];
   onOpenCreate: () => void;
   onOpenAiAgentModal: () => void;
   onEditProfile: () => void;
   onQuickUploadAvatar?: (newPhotoUrl: string) => void;
   onDeletePost?: (postId: string) => void;
   onDeleteReel?: (reelId: string) => void;
+  onNavigateTab?: (tab: InstagramTab) => void;
+  onOpenDirectChat?: (userId: string, userName?: string) => void;
+  onLogout?: () => void;
 }
 
 const DEFAULT_HIGHLIGHTS: InstagramHighlight[] = [
@@ -54,18 +62,65 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
   posts = [],
   reels = [],
   highlights = DEFAULT_HIGHLIGHTS,
+  allUsers = [],
   onOpenCreate,
   onOpenAiAgentModal,
   onEditProfile,
   onQuickUploadAvatar,
   onDeletePost,
-  onDeleteReel
+  onDeleteReel,
+  onNavigateTab,
+  onOpenDirectChat,
+  onLogout
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'reels' | 'saved'>('grid');
   const [selectedPost, setSelectedPost] = useState<InstagramPost | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
+  // Top Drawer Menu State
+  const [isTopMenuOpen, setIsTopMenuOpen] = useState(false);
+
+  // Sub-Modals for 100% Active Menu Items
+  const [activeMenuModal, setActiveMenuModal] = useState<
+    'friends' | 'notifications' | 'groups' | 'online_friends' | 'settings' | 'privacy' | 'help' | 'logout' | null
+  >(null);
+
+  // Friends & Followers tab
+  const [friendsSearch, setFriendsSearch] = useState("");
+  const [followingState, setFollowingState] = useState<Record<string, boolean>>({
+    "u1": true,
+    "u2": true,
+    "u3": false,
+    "u4": true,
+    "u5": false
+  });
+
+  // Settings states
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [autoPlayVideos, setAutoPlayVideos] = useState(true);
+  const [dataSaver, setDataSaver] = useState(false);
+  const [isPrivateAccount, setIsPrivateAccount] = useState(false);
+  const [hideOnlineStatus, setHideOnlineStatus] = useState(false);
+  const [twoFactorAuth, setTwoFactorAuth] = useState(true);
+  const [clearedCache, setClearedCache] = useState(false);
+
+  // Groups state
+  const [joinedGroups, setJoinedGroups] = useState<Record<string, boolean>>({
+    "g1": true,
+    "g2": true,
+    "g3": false,
+    "g4": true
+  });
+
+  // Notifications state
+  const [notifications, setNotifications] = useState([
+    { id: "n1", title: "নতুন লাইক ❤️", desc: "rajibul_islam আপনার পোস্টে লাইক দিয়েছেন", time: "৫ মিনিট আগে", unread: true },
+    { id: "n2", title: "নতুন কমেন্ট 💬", desc: "shafiqul_hasan কমেন্ট করেছেন: মাশাল্লাহ অসাধারণ!", time: "১৫ মিনিট আগে", unread: true },
+    { id: "n3", title: "নতুন অনুসরণ 👥", desc: "nurul_amin আপনাকে অনুসরণ করা শুরু করেছেন", time: "১ ঘণ্টা আগে", unread: false },
+    { id: "n4", title: "কমিউনিটি নোটিশ 📢", desc: "BINISTA ৩.০ আপডেটে যুক্ত হয়েছে লাইভ ভয়েস কলিং!", time: "২ ঘণ্টা আগে", unread: false }
+  ]);
 
   const avatarFileRef = useRef<HTMLInputElement>(null);
 
@@ -79,7 +134,7 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
   const totalLikesCount = displayPosts.reduce((acc, p) => acc + (p.likesCount || 0), 0) +
                           displayReels.reduce((acc, r) => acc + (r.likesCount || 0), 0);
 
-  // Quick avatar upload handler directly from profile
+  // Avatar upload
   const handleAvatarFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -104,8 +159,70 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
     setTimeout(() => setCopiedLink(false), 3000);
   };
 
+  // Online Friends Mock / Active Data
+  const sampleOnlineFriends = [
+    { id: "u1", name: "রাজিবুল ইসলাম", username: "rajibul_islam", photo: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150", status: "সক্রিয় এখন" },
+    { id: "u2", name: "শফিকুল হাসান", username: "shafiqul_hasan", photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150", status: "সক্রিয় এখন" },
+    { id: "u3", name: "নুরুল আমিন", username: "nurul_amin", photo: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150", status: "৫ মিনিট আগে" },
+    { id: "u4", name: "তানভীর আহমেদ", username: "tanvir_ahmed", photo: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150", status: "সক্রিয় এখন" }
+  ];
+
+  // Community Groups Data
+  const communityGroups = [
+    { id: "g1", name: "🌙 ইসলামিক দাওয়াহ ও তিলাওয়াত", members: "১,৪৫০ জন সদস্য", desc: "প্রতিদিনের কুরআনিক আলোচনা ও তিলাওয়াত শেয়ারিং" },
+    { id: "g2", name: "💻 টেক ও ক্রিয়েটর হাব", members: "৯৮০ জন সদস্য", desc: "ডিজিটাল স্কিলস, কোডিং এবং কন্টেন্ট ক্রিয়েশন" },
+    { id: "g3", name: "🎨 গ্রাফিক্স ও ফটো এডিটিং আসর", members: "৭২০ জন সদস্য", desc: "পিক্সেল এডিটিং টুলস ও ডিজাইন শেয়ারিং" },
+    { id: "g4", name: "💬 ফ্রেন্ডস আড্ডা জোন", members: "২,১০০ জন সদস্য", desc: "বিনোদনের রিয়েল-টাইম আড্ডা ও ফ্রেন্ড কমিউনিটি" }
+  ];
+
+  const handleMenuItemClick = (key: string) => {
+    setIsTopMenuOpen(false);
+
+    switch (key) {
+      case 'home':
+        if (onNavigateTab) onNavigateTab('feed');
+        break;
+      case 'profile':
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        break;
+      case 'friends':
+        setActiveMenuModal('friends');
+        break;
+      case 'reels':
+        if (onNavigateTab) onNavigateTab('reels');
+        break;
+      case 'notifications':
+        setActiveMenuModal('notifications');
+        break;
+      case 'saved':
+        setViewMode('saved');
+        window.scrollTo({ top: 350, behavior: 'smooth' });
+        break;
+      case 'groups':
+        setActiveMenuModal('groups');
+        break;
+      case 'online':
+        setActiveMenuModal('online_friends');
+        break;
+      case 'settings':
+        setActiveMenuModal('settings');
+        break;
+      case 'privacy':
+        setActiveMenuModal('privacy');
+        break;
+      case 'help':
+        setActiveMenuModal('help');
+        break;
+      case 'logout':
+        setActiveMenuModal('logout');
+        break;
+      default:
+        break;
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#090d14] text-slate-100 pb-28 max-w-lg mx-auto md:max-w-xl font-sans">
+    <div className="min-h-screen bg-[#090d14] text-slate-100 pb-28 max-w-lg mx-auto md:max-w-xl font-sans relative">
       
       {/* Hidden File Input for Avatar */}
       <input 
@@ -153,8 +270,575 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
           >
             <Edit3 className="w-4 h-4" />
           </button>
+
+          {/* 🌟 100% Functional Profile Menu Toggle Button */}
+          <button 
+            onClick={() => setIsTopMenuOpen(true)}
+            className="w-8 h-8 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 flex items-center justify-center text-emerald-400 hover:text-emerald-300 transition-all active:scale-90 cursor-pointer shadow-md shadow-emerald-500/20"
+            title="মেনু"
+          >
+            <Menu className="w-4.5 h-4.5" />
+          </button>
         </div>
       </header>
+
+      {/* 2. Slide-Over Profile Top Menu Drawer */}
+      {isTopMenuOpen && (
+        <div className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md flex justify-end animate-fadeIn">
+          <div 
+            className="w-[85%] max-w-xs bg-[#0e141f] border-l border-white/10 h-full flex flex-col justify-between p-4 shadow-2xl overflow-y-auto animate-slideInRight"
+          >
+            <div className="space-y-4">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div className="flex items-center gap-2.5">
+                  <img 
+                    src="/app_icon.png" 
+                    alt="BINISTA" 
+                    className="w-8 h-8 rounded-xl object-cover ring-2 ring-emerald-500/40" 
+                  />
+                  <div>
+                    <h3 className="font-black text-sm text-white leading-none">BINISTA মেনু</h3>
+                    <p className="text-[10px] text-emerald-400 font-bold mt-0.5">@{username}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsTopMenuOpen(false)}
+                  className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white active:scale-90"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 12 Menu Items List */}
+              <div className="space-y-1">
+                {/* 1. হোম */}
+                <button
+                  onClick={() => handleMenuItemClick('home')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">🏠</span>
+                  <span className="flex-1">হোম</span>
+                  <span className="text-[10px] text-slate-500 group-hover:text-emerald-400">ফিড</span>
+                </button>
+
+                {/* 2. আমার প্রোফাইল */}
+                <button
+                  onClick={() => handleMenuItemClick('profile')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">👤</span>
+                  <span className="flex-1">আমার প্রোফাইল</span>
+                  <span className="text-[10px] text-slate-500 group-hover:text-emerald-400">এডিট</span>
+                </button>
+
+                {/* 3. বন্ধু / অনুসরণ */}
+                <button
+                  onClick={() => handleMenuItemClick('friends')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">👥</span>
+                  <span className="flex-1">বন্ধু / অনুসরণ</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold">
+                    {followersCount + 5}
+                  </span>
+                </button>
+
+                {/* 4. রিলস / ক্লিপস */}
+                <button
+                  onClick={() => handleMenuItemClick('reels')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">🎬</span>
+                  <span className="flex-1">রিলস / ক্লিপস</span>
+                  <span className="text-[10px] text-purple-400 font-bold">ভিডিও</span>
+                </button>
+
+                {/* 5. নোটিফিকেশন */}
+                <button
+                  onClick={() => handleMenuItemClick('notifications')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">🔔</span>
+                  <span className="flex-1">নোটিফিকেশন</span>
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                </button>
+
+                {/* 6. সংরক্ষিত */}
+                <button
+                  onClick={() => handleMenuItemClick('saved')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">🔖</span>
+                  <span className="flex-1">সংরক্ষিত</span>
+                  <span className="text-[10px] text-slate-500">{savedPosts.length} টি</span>
+                </button>
+
+                {/* 7. গ্রুপ */}
+                <button
+                  onClick={() => handleMenuItemClick('groups')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">👨‍👩‍👧‍👦</span>
+                  <span className="flex-1">গ্রুপ</span>
+                  <span className="text-[10px] text-emerald-400 font-bold">৪টি গ্রুপ</span>
+                </button>
+
+                {/* 8. অনলাইন বন্ধু */}
+                <button
+                  onClick={() => handleMenuItemClick('online')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">🟢</span>
+                  <span className="flex-1">অনলাইন বন্ধু</span>
+                  <span className="text-[10px] text-emerald-400 font-black">৪ জন অনলাইন</span>
+                </button>
+
+                {/* 9. সেটিংস */}
+                <button
+                  onClick={() => handleMenuItemClick('settings')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">⚙️</span>
+                  <span className="flex-1">সেটিংস</span>
+                  <span className="text-[10px] text-slate-500">কনফিগ</span>
+                </button>
+
+                {/* 10. প্রাইভেসি ও নিরাপত্তা */}
+                <button
+                  onClick={() => handleMenuItemClick('privacy')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">🛡️</span>
+                  <span className="flex-1">প্রাইভেসি ও নিরাপত্তা</span>
+                  <span className="text-[10px] text-emerald-400">নিরাপদ 🔒</span>
+                </button>
+
+                {/* 11. সহায়তা */}
+                <button
+                  onClick={() => handleMenuItemClick('help')}
+                  className="w-full px-3 py-2.5 rounded-xl flex items-center gap-3 text-slate-200 hover:bg-white/5 active:bg-emerald-500/10 hover:text-emerald-400 transition-colors text-left font-bold text-xs cursor-pointer group"
+                >
+                  <span className="text-base">❓</span>
+                  <span className="flex-1">সহায়তা</span>
+                  <span className="text-[10px] text-slate-500">২৪/৭ সাপোর্ট</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 12. লগআউট */}
+            <div className="pt-4 border-t border-white/10">
+              <button
+                onClick={() => handleMenuItemClick('logout')}
+                className="w-full py-2.5 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+              >
+                <span className="text-base">🚪</span>
+                <span>লগআউট</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-MODAL 1: 👥 বন্ধু / অনুসরণ (Friends & Followers) */}
+      {activeMenuModal === 'friends' && (
+        <div className="fixed inset-0 z-[350] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#121926] border border-emerald-500/30 rounded-3xl p-5 w-full max-w-sm text-slate-100 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👥</span>
+                <h3 className="font-black text-sm text-white">বন্ধু ও অনুসরণ তালিকা</h3>
+              </div>
+              <button 
+                onClick={() => setActiveMenuModal(null)}
+                className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="বন্ধু বা ইউজার সার্চ করুন..."
+                value={friendsSearch}
+                onChange={(e) => setFriendsSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-slate-900/80 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+              {sampleOnlineFriends
+                .filter(f => f.name.toLowerCase().includes(friendsSearch.toLowerCase()) || f.username.toLowerCase().includes(friendsSearch.toLowerCase()))
+                .map(friend => {
+                  const isFollowing = followingState[friend.id];
+                  return (
+                    <div key={friend.id} className="p-2.5 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <img src={friend.photo} alt={friend.name} className="w-9 h-9 rounded-full object-cover ring-1 ring-emerald-500/40" />
+                        <div>
+                          <h4 className="font-bold text-xs text-white">{friend.name}</h4>
+                          <p className="text-[10px] text-slate-400">@{friend.username}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setFollowingState(prev => ({ ...prev, [friend.id]: !prev[friend.id] }))}
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all cursor-pointer ${
+                          isFollowing 
+                            ? "bg-white/10 text-slate-300 hover:bg-rose-500/20 hover:text-rose-300" 
+                            : "bg-emerald-500 text-black hover:bg-emerald-400"
+                        }`}
+                      >
+                        {isFollowing ? "অনুসরণ করছেন" : "অনুসরণ করুন"}
+                      </button>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-MODAL 2: 🔔 নোটিফিকেশন (Notifications) */}
+      {activeMenuModal === 'notifications' && (
+        <div className="fixed inset-0 z-[350] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#121926] border border-emerald-500/30 rounded-3xl p-5 w-full max-w-sm text-slate-100 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🔔</span>
+                <h3 className="font-black text-sm text-white">নোটিফিকেশন সেন্টার</h3>
+              </div>
+              <button 
+                onClick={() => setActiveMenuModal(null)}
+                className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex justify-between items-center text-[10px]">
+              <span className="text-slate-400">সর্বশেষ আপডেট ও কার্যক্রম</span>
+              <button 
+                onClick={() => setNotifications(prev => prev.map(n => ({ ...n, unread: false })))}
+                className="text-emerald-400 font-bold hover:underline cursor-pointer"
+              >
+                সব পড়া হয়েছে চিহ্নিত করুন
+              </button>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+              {notifications.map(n => (
+                <div key={n.id} className={`p-3 rounded-2xl border transition-all ${n.unread ? "bg-emerald-950/30 border-emerald-500/30" : "bg-white/5 border-white/5"}`}>
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-xs text-white">{n.title}</h4>
+                    <span className="text-[9px] text-slate-400">{n.time}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-1">{n.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-MODAL 3: 👨‍👩‍👧‍👦 গ্রুপ (Groups & Communities) */}
+      {activeMenuModal === 'groups' && (
+        <div className="fixed inset-0 z-[350] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#121926] border border-emerald-500/30 rounded-3xl p-5 w-full max-w-sm text-slate-100 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👨‍👩‍👧‍👦</span>
+                <h3 className="font-black text-sm text-white">কমিউনিটি গ্রুপ</h3>
+              </div>
+              <button 
+                onClick={() => setActiveMenuModal(null)}
+                className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto space-y-2.5 pr-1">
+              {communityGroups.map(group => {
+                const isJoined = joinedGroups[group.id];
+                return (
+                  <div key={group.id} className="p-3 rounded-2xl bg-white/5 border border-white/5 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="font-bold text-xs text-white">{group.name}</h4>
+                        <p className="text-[10px] text-emerald-400 font-bold">{group.members}</p>
+                      </div>
+                      <button
+                        onClick={() => setJoinedGroups(prev => ({ ...prev, [group.id]: !prev[group.id] }))}
+                        className={`px-3 py-1 rounded-full text-[10px] font-black transition-all cursor-pointer ${
+                          isJoined 
+                            ? "bg-white/10 text-slate-300 hover:bg-rose-500/20" 
+                            : "bg-emerald-500 text-black hover:bg-emerald-400"
+                        }`}
+                      >
+                        {isJoined ? "যুক্ত আছেন ✓" : "+ যোগ দিন"}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-400">{group.desc}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-MODAL 4: 🟢 অনলাইন বন্ধু (Online Friends) */}
+      {activeMenuModal === 'online_friends' && (
+        <div className="fixed inset-0 z-[350] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#121926] border border-emerald-500/30 rounded-3xl p-5 w-full max-w-sm text-slate-100 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                <h3 className="font-black text-sm text-white">সক্রিয় অনলাইন বন্ধু</h3>
+              </div>
+              <button 
+                onClick={() => setActiveMenuModal(null)}
+                className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto space-y-2.5 pr-1">
+              {sampleOnlineFriends.map(friend => (
+                <div key={friend.id} className="p-3 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative">
+                      <img src={friend.photo} alt={friend.name} className="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-500" />
+                      <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-[#121926]" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-white">{friend.name}</h4>
+                      <p className="text-[10px] text-emerald-400 font-bold">{friend.status}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setActiveMenuModal(null);
+                      if (onOpenDirectChat) {
+                        onOpenDirectChat(friend.id, friend.name);
+                      } else if (onNavigateTab) {
+                        onNavigateTab('messages');
+                      }
+                    }}
+                    className="p-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 active:scale-95 transition-all cursor-pointer"
+                    title="মেসেজ পাঠান"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-MODAL 5: ⚙️ সেটিংস (Settings) */}
+      {activeMenuModal === 'settings' && (
+        <div className="fixed inset-0 z-[350] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#121926] border border-emerald-500/30 rounded-3xl p-5 w-full max-w-sm text-slate-100 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">⚙️</span>
+                <h3 className="font-black text-sm text-white">অ্যাপ ও অ্যাকাউন্ট সেটিংস</h3>
+              </div>
+              <button 
+                onClick={() => setActiveMenuModal(null)}
+                className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Sound */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5">
+                <div className="flex items-center gap-2.5">
+                  <Volume2 className="w-4 h-4 text-emerald-400" />
+                  <span>নোটিফিকেশন সাউন্ড</span>
+                </div>
+                <button 
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${soundEnabled ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${soundEnabled ? 'right-1' : 'left-1'}`} />
+                </button>
+              </div>
+
+              {/* Auto Play */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5">
+                <div className="flex items-center gap-2.5">
+                  <Film className="w-4 h-4 text-purple-400" />
+                  <span>রিলস ও ভিডিও অটো-প্লে</span>
+                </div>
+                <button 
+                  onClick={() => setAutoPlayVideos(!autoPlayVideos)}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${autoPlayVideos ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${autoPlayVideos ? 'right-1' : 'left-1'}`} />
+                </button>
+              </div>
+
+              {/* Clear Cache */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5">
+                <div className="flex items-center gap-2.5">
+                  <RefreshCw className="w-4 h-4 text-amber-400" />
+                  <span>ক্যাশ মেমোরি ক্লিয়ার</span>
+                </div>
+                <button 
+                  onClick={() => {
+                    setClearedCache(true);
+                    setTimeout(() => setClearedCache(false), 2000);
+                  }}
+                  className="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 font-bold hover:bg-amber-500/30 cursor-pointer"
+                >
+                  {clearedCache ? "ক্লিয়ার হয়েছে ✓" : "ক্লিয়ার"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-MODAL 6: 🛡️ প্রাইভেসি ও নিরাপত্তা (Privacy & Security) */}
+      {activeMenuModal === 'privacy' && (
+        <div className="fixed inset-0 z-[350] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#121926] border border-emerald-500/30 rounded-3xl p-5 w-full max-w-sm text-slate-100 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🛡️</span>
+                <h3 className="font-black text-sm text-white">প্রাইভেসি ও নিরাপত্তা</h3>
+              </div>
+              <button 
+                onClick={() => setActiveMenuModal(null)}
+                className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Private Account */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5">
+                <div className="flex items-center gap-2.5">
+                  <Lock className="w-4 h-4 text-emerald-400" />
+                  <div>
+                    <p className="font-bold">ব্যক্তিগত অ্যাকাউন্ট</p>
+                    <p className="text-[10px] text-slate-400">শুধু ফলোয়াররা আপনার পোস্ট দেখতে পাবেন</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsPrivateAccount(!isPrivateAccount)}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${isPrivateAccount ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${isPrivateAccount ? 'right-1' : 'left-1'}`} />
+                </button>
+              </div>
+
+              {/* Hide Online */}
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5">
+                <div className="flex items-center gap-2.5">
+                  <Eye className="w-4 h-4 text-teal-400" />
+                  <div>
+                    <p className="font-bold">অনলাইন স্ট্যাটাস লুকান</p>
+                    <p className="text-[10px] text-slate-400">অন্যরা দেখতে পাবে না আপনি কখন সক্রিয় আছেন</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setHideOnlineStatus(!hideOnlineStatus)}
+                  className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${hideOnlineStatus ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                >
+                  <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${hideOnlineStatus ? 'right-1' : 'left-1'}`} />
+                </button>
+              </div>
+
+              {/* 2FA */}
+              <div className="p-3 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span className="font-bold text-emerald-300">টু-ফ্যাক্টর অথেনটিকেশন</span>
+                </div>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500 text-black">সক্রিয়</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-MODAL 7: ❓ সহায়তা (Help & Support) */}
+      {activeMenuModal === 'help' && (
+        <div className="fixed inset-0 z-[350] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#121926] border border-emerald-500/30 rounded-3xl p-5 w-full max-w-sm text-slate-100 space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">❓</span>
+                <h3 className="font-black text-sm text-white">সহায়তা কেন্দ্র ও FAQ</h3>
+              </div>
+              <button 
+                onClick={() => setActiveMenuModal(null)}
+                className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="p-3 rounded-2xl bg-white/5 space-y-1">
+                <p className="font-bold text-white">📸 কীভাবে পোস্ট বা স্টোরি আপলোড করবেন?</p>
+                <p className="text-[11px] text-slate-400">হোম স্ক্রিনের উপরে '+' বাটনে চাপ দিয়ে ছবি বা ভিডিও নির্বাচন করুন।</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-white/5 space-y-1">
+                <p className="font-bold text-white">📞 লাইভ অডিও ও ভিডিও কল কীভাবে করবেন?</p>
+                <p className="text-[11px] text-slate-400">চ্যাট বক্সে ঢুকে উপরের অডিও বা ভিডিও কল আইকনে চাপ দিন।</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 text-center space-y-1">
+                <p className="font-black text-emerald-400">২৪/৭ কাস্টমার সাপোর্ট</p>
+                <p className="text-[10px] text-slate-300">ইমেইল: support@binista.app</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-MODAL 8: 🚪 লগআউট (Logout Confirmation) */}
+      {activeMenuModal === 'logout' && (
+        <div className="fixed inset-0 z-[350] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-[#121926] border border-rose-500/40 rounded-3xl p-5 w-full max-w-sm text-slate-100 text-center space-y-4 shadow-2xl relative">
+            <div className="w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto text-2xl">
+              🚪
+            </div>
+            <div>
+              <h3 className="font-black text-base text-white">লগআউট করতে চান?</h3>
+              <p className="text-xs text-slate-400 mt-1">আপনি কি নিশ্চিত যে আপনার অ্যাকাউন্ট থেকে লগআউট হতে চান?</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                onClick={() => setActiveMenuModal(null)}
+                className="py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs active:scale-95 cursor-pointer"
+              >
+                বাতিল করুন
+              </button>
+              <button
+                onClick={() => {
+                  setActiveMenuModal(null);
+                  if (onLogout) onLogout();
+                }}
+                className="py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-black text-xs active:scale-95 cursor-pointer shadow-lg shadow-rose-500/20"
+              >
+                হ্যাঁ, লগআউট
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. Hero Cover Banner & Avatar Container */}
       <div className="relative px-3 pt-3">
@@ -178,203 +862,161 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
           </div>
         </div>
 
-        {/* Floating User Card & Avatar Bar */}
-        <div className="relative -mt-10 bg-[#121926]/95 backdrop-blur-xl border border-white/10 rounded-3xl p-4 shadow-2xl">
-          <div className="flex items-start justify-between">
-            {/* Avatar with Direct Gallery Upload Trigger */}
-            <div className="relative -mt-12 group">
-              <div className="w-22 h-22 rounded-3xl overflow-hidden ring-4 ring-[#121926] bg-[#1a2333] shadow-2xl flex items-center justify-center relative">
-                {photoURL ? (
-                  <img 
-                    src={photoURL} 
-                    alt={displayName} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-emerald-800 to-slate-900 flex items-center justify-center text-emerald-200">
-                    <span className="text-2xl font-black">{displayName.charAt(0) || "U"}</span>
-                  </div>
-                )}
-
-                {isUploadingPhoto && (
-                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-emerald-400 text-[9px] font-black">
-                    আপলোড...
-                  </div>
-                )}
-              </div>
-
-              {/* Direct Gallery Camera Button */}
-              <button 
-                type="button"
-                onClick={() => avatarFileRef.current?.click()}
-                className="absolute bottom-0 right-0 w-7 h-7 bg-gradient-to-r from-emerald-500 to-teal-400 text-black rounded-xl flex items-center justify-center font-bold text-xs ring-2 ring-[#121926] shadow-lg active:scale-90 transition-transform cursor-pointer"
-                title="গ্যালারি থেকে প্রোফাইল ছবি পরিবর্তন করুন"
-              >
-                <Camera className="w-3.5 h-3.5 stroke-[2.5]" />
-              </button>
-            </div>
-
-            {/* Quick Action Pills */}
-            <div className="flex items-center gap-2 pt-1">
-              <button 
-                onClick={onEditProfile}
-                className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black text-xs font-black rounded-2xl transition-all shadow-md active:scale-95 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Edit3 className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>প্রোফাইল সাজান</span>
-              </button>
-              
-              <button 
-                onClick={onOpenCreate}
-                className="p-2 bg-white/10 hover:bg-white/15 text-white rounded-2xl transition-all active:scale-95 cursor-pointer"
-                title="নতুন পোস্ট বা রিলস তৈরি করুন"
-              >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
-              </button>
-            </div>
-          </div>
-
-          {/* User Name & Categorization */}
-          <div className="mt-3.5 space-y-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-black text-white tracking-tight leading-tight">
-                {displayName}
-              </h1>
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            </div>
-
-            <div className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] font-bold px-2.5 py-0.5 rounded-full">
-              <span>{category}</span>
-            </div>
-
-            {/* Rich Bio */}
-            <p className="text-xs text-slate-300 leading-relaxed pt-1 whitespace-pre-line font-medium">
-              {bio}
-            </p>
-
-            {/* Website & Location Tags */}
-            <div className="flex flex-wrap items-center gap-3 pt-2 text-[11px] text-slate-400">
-              {location && (
-                <div className="flex items-center gap-1 text-slate-400">
-                  <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
-                  <span>{location}</span>
+        {/* Floating Avatar & Stats Summary Row */}
+        <div className="flex items-end justify-between px-3 -mt-12 relative z-10">
+          <div className="relative group">
+            <div className="w-24 h-24 rounded-3xl overflow-hidden ring-4 ring-[#090d14] bg-slate-800 shadow-2xl border border-white/10 relative">
+              {photoURL ? (
+                <img src={photoURL} alt={displayName} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-emerald-600 to-teal-800 flex items-center justify-center text-white font-black text-2xl">
+                  {displayName.charAt(0) || "U"}
                 </div>
               )}
-              {website && (
-                <a 
-                  href={website.startsWith("http") ? website : `https://${website}`}
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-semibold truncate max-w-[200px]"
-                >
-                  <Globe className="w-3 h-3 shrink-0" />
-                  <span className="truncate">{website.replace(/^https?:\/\//, '')}</span>
-                  <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                </a>
-              )}
+
+              {/* Quick Camera Overlay Trigger */}
+              <button 
+                onClick={() => avatarFileRef.current?.click()}
+                disabled={isUploadingPhoto}
+                className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer text-white"
+                title="প্রোফাইল ছবি পরিবর্তন"
+              >
+                {isUploadingPhoto ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Camera className="w-6 h-6" />
+                )}
+              </button>
             </div>
+
+            {/* Quick Upload Badge */}
+            <button
+              onClick={() => avatarFileRef.current?.click()}
+              className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-emerald-500 text-black border-2 border-[#090d14] flex items-center justify-center shadow-lg active:scale-90 transition-transform cursor-pointer"
+              title="নতুন ছবি দিন"
+            >
+              <Plus className="w-4 h-4 stroke-[3]" />
+            </button>
           </div>
 
-          {/* 3. Live Stats Bar */}
-          <div className="mt-4 pt-3.5 border-t border-white/5 grid grid-cols-4 gap-1 text-center bg-[#0d131e]/80 rounded-2xl p-2.5 border border-white/5">
-            <div>
-              <div className="text-sm font-black text-white">{totalPostsCount}</div>
-              <div className="text-[10px] font-semibold text-slate-400">পোস্ট</div>
+          {/* Social Stats Counters */}
+          <div className="flex items-center gap-4 bg-slate-900/80 backdrop-blur-md border border-white/10 px-4 py-2 rounded-2xl shadow-xl">
+            <div className="text-center">
+              <span className="block font-black text-sm text-white leading-tight">{totalPostsCount}</span>
+              <span className="text-[10px] text-slate-400 font-semibold">পোস্ট</span>
             </div>
-            <div>
-              <div className="text-sm font-black text-white">{totalReelsCount}</div>
-              <div className="text-[10px] font-semibold text-slate-400">রিলস</div>
+            <div className="w-[1px] h-6 bg-white/10" />
+            <div className="text-center cursor-pointer" onClick={() => setActiveMenuModal('friends')}>
+              <span className="block font-black text-sm text-emerald-400 leading-tight">{followersCount}</span>
+              <span className="text-[10px] text-slate-400 font-semibold">অনুসারী</span>
             </div>
-            <div>
-              <div className="text-sm font-black text-white">{followersCount > 0 ? followersCount : "০"}</div>
-              <div className="text-[10px] font-semibold text-slate-400">ফলোয়ার্স</div>
-            </div>
-            <div>
-              <div className="text-sm font-black text-emerald-400">{totalLikesCount > 0 ? totalLikesCount : "০"}</div>
-              <div className="text-[10px] font-semibold text-slate-400">মোট লাইক</div>
+            <div className="w-[1px] h-6 bg-white/10" />
+            <div className="text-center cursor-pointer" onClick={() => setActiveMenuModal('friends')}>
+              <span className="block font-black text-sm text-white leading-tight">{followingCount}</span>
+              <span className="text-[10px] text-slate-400 font-semibold">অনুসরণ</span>
             </div>
           </div>
-
         </div>
       </div>
 
-      {/* 4. Story Highlights Shelf */}
-      <div className="px-4 pt-4 pb-2">
-        <div className="flex items-center justify-between mb-2.5 px-1">
-          <span className="text-xs font-black text-slate-300 uppercase tracking-wider">
-            স্টোরি হাইলাইটস
-          </span>
-          <button 
-            onClick={onOpenCreate}
-            className="text-[10px] font-bold text-emerald-400 hover:underline flex items-center gap-0.5"
-          >
-            <span>+ নতুন</span>
-          </button>
+      {/* 3. Bio & Metadata Details */}
+      <div className="px-4 mt-3 space-y-2">
+        <div>
+          <h2 className="font-black text-lg text-white leading-tight">{displayName}</h2>
+          <p className="text-xs font-bold text-emerald-400">{category}</p>
         </div>
 
-        <div className="flex items-center gap-3 overflow-x-auto no-scrollbar py-1">
-          {/* Add New Highlight Button */}
-          <button
-            onClick={onOpenCreate}
-            className="flex flex-col items-center gap-1.5 shrink-0 group cursor-pointer"
-          >
-            <div className="w-14 h-14 rounded-2xl border-2 border-dashed border-emerald-500/40 bg-emerald-500/5 group-hover:bg-emerald-500/10 flex items-center justify-center text-emerald-400 transition-all active:scale-95 shadow-xs">
-              <Plus className="w-5 h-5 stroke-[2.5]" />
-            </div>
-            <span className="text-[10px] font-bold text-slate-400">নতুন</span>
-          </button>
+        <p className="text-xs text-slate-300 leading-relaxed font-normal whitespace-pre-line">
+          {bio}
+        </p>
 
-          {/* Existing Highlights */}
-          {highlights.map((hl) => (
-            <div 
-              key={hl.id} 
-              className="flex flex-col items-center gap-1.5 shrink-0 cursor-pointer group"
+        {/* Location & Website */}
+        <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-slate-400 font-medium">
+          {location && (
+            <span className="flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+              {location}
+            </span>
+          )}
+          {website && (
+            <a 
+              href={website.startsWith('http') ? website : `https://${website}`} 
+              target="_blank" 
+              rel="noreferrer"
+              className="flex items-center gap-1 text-emerald-400 font-bold hover:underline"
             >
-              <div className="w-14 h-14 rounded-2xl overflow-hidden p-0.5 bg-gradient-to-tr from-emerald-500 to-teal-400 shadow-md group-hover:scale-105 transition-transform">
-                <div className="w-full h-full rounded-2xl overflow-hidden bg-slate-800">
-                  <img src={hl.coverUrl} alt={hl.title} className="w-full h-full object-cover" />
-                </div>
+              <Globe className="w-3.5 h-3.5" />
+              {website.replace(/^https?:\/\//, '')}
+            </a>
+          )}
+        </div>
+
+        {/* 4. Action Buttons (Edit Profile & Share) */}
+        <div className="grid grid-cols-2 gap-2 pt-2">
+          <button
+            onClick={onEditProfile}
+            className="py-2 px-4 rounded-xl bg-white/10 hover:bg-white/15 active:scale-95 border border-white/10 text-white font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+          >
+            <Edit3 className="w-3.5 h-3.5 text-slate-300" />
+            <span>প্রোফাইল এডিট</span>
+          </button>
+          <button
+            onClick={() => setIsShareModalOpen(true)}
+            className="py-2 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-95 text-black font-black text-xs transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 cursor-pointer"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>শেয়ার ও QR</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 5. Story Highlights Carousel */}
+      <div className="mt-5 px-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">স্টোরি হাইলাইটস</span>
+        </div>
+        <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-none">
+          {highlights.map((hl) => (
+            <div key={hl.id} className="flex flex-col items-center gap-1 flex-shrink-0 cursor-pointer group">
+              <div className="w-14 h-14 rounded-2xl p-0.5 ring-2 ring-emerald-500/40 group-hover:ring-emerald-400 transition-all bg-slate-900 overflow-hidden shadow-md">
+                <img src={hl.coverUrl} alt={hl.title} className="w-full h-full object-cover rounded-xl" />
               </div>
-              <span className="text-[10px] font-bold text-slate-300 truncate max-w-[64px] text-center">
-                {hl.title}
-              </span>
+              <span className="text-[10px] font-bold text-slate-300 truncate max-w-[60px]">{hl.title}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* 5. Content Display Mode Tabs */}
-      <div className="mt-3 border-t border-b border-white/10 bg-[#0d131e] sticky top-[53px] z-30 flex items-center">
+      {/* 6. Tabs Navigation (Grid, Reels, Saved) */}
+      <div className="mt-4 border-t border-white/10 flex items-center justify-around bg-[#0c121c]/60">
         <button
           onClick={() => setViewMode('grid')}
-          className={`flex-1 py-3 flex items-center justify-center gap-1.5 text-xs font-black transition-all cursor-pointer ${
+          className={`flex-1 py-3 flex items-center justify-center gap-1.5 font-bold text-xs transition-colors border-b-2 cursor-pointer ${
             viewMode === 'grid' 
-              ? 'text-emerald-400 border-b-2 border-emerald-400 bg-emerald-500/5' 
-              : 'text-slate-400 hover:text-white'
+              ? 'text-emerald-400 border-emerald-400 bg-emerald-500/5' 
+              : 'text-slate-400 border-transparent hover:text-slate-200'
           }`}
         >
           <Grid className="w-4 h-4" />
-          <span>পোস্ট গ্রিড ({displayPosts.length})</span>
+          <span>পোস্ট ({totalPostsCount})</span>
         </button>
-
         <button
           onClick={() => setViewMode('reels')}
-          className={`flex-1 py-3 flex items-center justify-center gap-1.5 text-xs font-black transition-all cursor-pointer ${
+          className={`flex-1 py-3 flex items-center justify-center gap-1.5 font-bold text-xs transition-colors border-b-2 cursor-pointer ${
             viewMode === 'reels' 
-              ? 'text-emerald-400 border-b-2 border-emerald-400 bg-emerald-500/5' 
-              : 'text-slate-400 hover:text-white'
+              ? 'text-emerald-400 border-emerald-400 bg-emerald-500/5' 
+              : 'text-slate-400 border-transparent hover:text-slate-200'
           }`}
         >
           <Film className="w-4 h-4" />
-          <span>রিলস ও ক্লিপস ({displayReels.length})</span>
+          <span>রিলস ({totalReelsCount})</span>
         </button>
-
         <button
           onClick={() => setViewMode('saved')}
-          className={`flex-1 py-3 flex items-center justify-center gap-1.5 text-xs font-black transition-all cursor-pointer ${
+          className={`flex-1 py-3 flex items-center justify-center gap-1.5 font-bold text-xs transition-colors border-b-2 cursor-pointer ${
             viewMode === 'saved' 
-              ? 'text-emerald-400 border-b-2 border-emerald-400 bg-emerald-500/5' 
-              : 'text-slate-400 hover:text-white'
+              ? 'text-emerald-400 border-emerald-400 bg-emerald-500/5' 
+              : 'text-slate-400 border-transparent hover:text-slate-200'
           }`}
         >
           <Bookmark className="w-4 h-4" />
@@ -382,9 +1024,9 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
         </button>
       </div>
 
-      {/* 6. Content Grid Body */}
+      {/* Media Grid Stream */}
       <div className="p-1">
-        {/* POSTS GRID */}
+        {/* GRID POSTS */}
         {viewMode === 'grid' && (
           <div>
             {displayPosts.length === 0 ? (
@@ -392,15 +1034,15 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
                 <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mx-auto shadow-inner">
                   <Grid className="w-8 h-8" />
                 </div>
-                <h3 className="font-bold text-sm text-white">এখনো কোনো পোস্ট নেই</h3>
+                <h3 className="font-bold text-sm text-white">কোনো পোস্ট নেই</h3>
                 <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                  আপনার প্রিয় মুহূর্তের ছবি বা ভিডিও পোস্ট করে আপনার ফিড সাজিয়ে তুলুন।
+                  আপনার ছবি ও ভিডিও সবার সাথে শেয়ার করতে নতুন পোস্ট তৈরি করুন।
                 </p>
                 <button
                   onClick={onOpenCreate}
-                  className="px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs shadow-lg transition-all active:scale-95 cursor-pointer"
+                  className="px-5 py-2.5 rounded-full bg-emerald-500 text-black font-black text-xs shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform cursor-pointer"
                 >
-                  + প্রথম পোস্ট করুন
+                  + প্রথম পোস্ট তৈরি করুন
                 </button>
               </div>
             ) : (
@@ -411,46 +1053,16 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
                     onClick={() => setSelectedPost(post)}
                     className="relative aspect-square bg-[#151c28] overflow-hidden group cursor-pointer rounded-lg"
                   >
-                    {post.mediaType === 'video' ? (
-                      <video 
-                        src={post.mediaUrls[0]} 
-                        className="w-full h-full object-cover" 
-                        preload="metadata" 
-                        muted 
-                        playsInline 
-                      />
-                    ) : (
-                      <img 
-                        src={post.mediaUrls[0]} 
-                        alt="" 
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-                        loading="lazy" 
-                      />
-                    )}
-
-                    {/* Indicators */}
+                    <img 
+                      src={post.mediaUrls[0]} 
+                      alt="" 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                    />
                     {post.mediaType === 'video' && (
-                      <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-xs p-1 rounded-md text-white">
+                      <div className="absolute top-1.5 right-1.5 text-white bg-black/60 p-1 rounded-md">
                         <Film className="w-3 h-3" />
                       </div>
                     )}
-                    {post.mediaUrls.length > 1 && (
-                      <div className="absolute top-1.5 right-1.5 bg-black/60 backdrop-blur-xs p-1 rounded-md text-white">
-                        <Layers className="w-3 h-3" />
-                      </div>
-                    )}
-
-                    {/* Hover Stats Overlay */}
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 text-white text-xs font-bold">
-                      <div className="flex items-center gap-1">
-                        <Heart className="w-3.5 h-3.5 fill-white" />
-                        <span>{post.likesCount || 0}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <MessageSquare className="w-3.5 h-3.5" />
-                        <span>{post.commentsCount || 0}</span>
-                      </div>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -458,7 +1070,7 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
           </div>
         )}
 
-        {/* REELS GRID */}
+        {/* REELS */}
         {viewMode === 'reels' && (
           <div>
             {displayReels.length === 0 ? (
@@ -466,15 +1078,15 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
                 <div className="w-16 h-16 rounded-3xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mx-auto shadow-inner">
                   <Film className="w-8 h-8" />
                 </div>
-                <h3 className="font-bold text-sm text-white">কোনো রিলস ভিডিও নেই</h3>
+                <h3 className="font-bold text-sm text-white">কোনো রিলস নেই</h3>
                 <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                  শর্ট ভিডিও আপলোড করে ক্রিয়েটর হিসেবে জনপ্রিয়তা অর্জন করুন।
+                  শর্ট ভিডিও ও আকর্ষণীয় ক্লিপস তৈরি করে আপনার ফলোয়ার বাড়ান।
                 </p>
                 <button
                   onClick={onOpenCreate}
-                  className="px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs shadow-lg transition-all active:scale-95 cursor-pointer"
+                  className="px-5 py-2.5 rounded-full bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-500/20 active:scale-95 transition-transform cursor-pointer"
                 >
-                  + নতুন রিলস আপলোড
+                  + রিলস তৈরি করুন
                 </button>
               </div>
             ) : (
@@ -487,13 +1099,12 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
                     <video 
                       src={reel.videoUrl} 
                       className="w-full h-full object-cover" 
-                      preload="metadata" 
                       muted 
                       playsInline 
                     />
-                    <div className="absolute bottom-2 left-2 flex items-center gap-1 text-[10px] font-black text-white bg-black/60 px-1.5 py-0.5 rounded-md backdrop-blur-xs">
-                      <Eye className="w-2.5 h-2.5" />
-                      <span>{reel.viewsCount || reel.likesCount || 1}</span>
+                    <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1 text-[10px] text-white font-bold bg-black/60 px-1.5 py-0.5 rounded-md">
+                      <Heart className="w-2.5 h-2.5 text-rose-500 fill-rose-500" />
+                      <span>{reel.likesCount || 0}</span>
                     </div>
                   </div>
                 ))}
@@ -653,3 +1264,5 @@ export const InstagramProfile: React.FC<InstagramProfileProps> = ({
     </div>
   );
 };
+
+export default InstagramProfile;

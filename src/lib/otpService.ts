@@ -191,7 +191,7 @@ export const otpService = {
     const salt = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     const otpHash = await sha256Hex(otp + salt);
 
-    const messageContent = `Your All MAYADIN FASHION verification code is ${otp}. Valid for 5 minutes. Please do not share this OTP.`;
+    const messageContent = `Your BINISTA verification code is ${otp}. Valid for 5 minutes. Please do not share this OTP.`;
 
     try {
       const smsResult = await sendSms(formatted, messageContent, "OTP Verification", "System");
@@ -337,6 +337,110 @@ export const otpService = {
       return true;
     }
     return false;
+  },
+
+  /**
+   * Request an OTP to be generated and transmitted via Email.
+   */
+  async sendEmailOtp(email: string): Promise<SendOtpResult> {
+    const formatted = email.trim().toLowerCase();
+    if (!formatted || !formatted.includes("@")) {
+      return {
+        success: false,
+        error: "সঠিক ইমেইল এড্রেস লিখুন।"
+      };
+    }
+
+    try {
+      const response = await fetch(getApiUrl("/api/otp/send"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formatted })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          saveStoredSession({
+            phone: formatted,
+            otpHash: "",
+            salt: "",
+            createdAt: Date.now(),
+            expiresAt: Date.now() + (5 * 60 * 1000),
+            attempts: 0,
+            lastSentAt: Date.now(),
+            verified: false
+          });
+
+          return {
+            success: true,
+            message: data.message || `আপনার ইমেইল ${formatted}-এ একটি ৬ সংখ্যার ওটিপি পাঠানো হয়েছে।`,
+            phone: formatted,
+            cooldown: data.cooldown || 60
+          };
+        } else if (data.error) {
+          return {
+            success: false,
+            error: data.error,
+            code: data.code
+          };
+        }
+      }
+    } catch (serverErr) {
+      console.error("[OTP] Server Email OTP send error:", serverErr);
+    }
+
+    return {
+      success: false,
+      error: "ইমেইল ওটিপি পাঠাতে সমস্যা হয়েছে। দয়া করে পুনরায় চেষ্টা করুন।"
+    };
+  },
+
+  /**
+   * Verify the 6-digit OTP code against the server for email.
+   */
+  async verifyEmailOtp(email: string, otp: string): Promise<VerifyOtpResult> {
+    if (!email || !otp || otp.trim().length !== 6) {
+      return {
+        success: false,
+        error: "অনুগ্রহ করে ৬ সংখ্যার সম্পূর্ণ OTP কোডটি লিখুন।"
+      };
+    }
+
+    const formatted = email.trim().toLowerCase();
+
+    try {
+      const response = await fetch(getApiUrl("/api/otp/verify"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formatted, otp: otp.trim() })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.verificationToken) {
+          return {
+            success: true,
+            verificationToken: data.verificationToken,
+            message: data.message || "ইমেইল ওটিপি ভেরিফিকেশন সফল হয়েছে।"
+          };
+        } else if (data.error) {
+          return {
+            success: false,
+            error: data.error,
+            code: data.code,
+            remainingAttempts: data.remainingAttempts
+          };
+        }
+      }
+    } catch (serverErr) {
+      console.error("[OTP] Server Email OTP verify error:", serverErr);
+    }
+
+    return {
+      success: false,
+      error: "ভেরিফিকেশন ব্যর্থ হয়েছে। অনুগ্রহ করে সঠিক কোডটি পুনরায় টাইপ করুন।"
+    };
   }
 };
 

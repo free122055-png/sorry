@@ -39,7 +39,7 @@ const isVideoMedia = (url: string) => {
 };
 
 export const ChatList: React.FC = () => {
-  const { user, profile } = useAuth();
+  const { user, profile, logout } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
@@ -692,12 +692,19 @@ export const ChatList: React.FC = () => {
           followingCount={profileData.followingCount}
           posts={posts}
           reels={combinedReels}
+          allUsers={allUsers}
           onOpenCreate={() => setIsCreateOpen(true)}
           onOpenAiAgentModal={() => setIsAiAgentModalOpen(true)}
           onEditProfile={() => setIsEditProfileOpen(true)}
           onQuickUploadAvatar={handleQuickUploadAvatar}
           onDeletePost={handleDeletePost}
           onDeleteReel={handleDeleteReel}
+          onNavigateTab={(tab) => setActiveTab(tab)}
+          onLogout={logout}
+          onOpenDirectChat={(userId, userName) => {
+            setActiveTab('messages');
+            handleSendDirect(userId, "আসসালামু আলাইকুম!");
+          }}
         />
       )}
 

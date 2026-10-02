@@ -5,7 +5,7 @@ import { collection, addDoc, serverTimestamp, doc, getDoc } from "firebase/fires
 
 export const PERMANENT_SMS_API_KEY = typeof process !== "undefined" && process.env?.SMS_API_KEY ? process.env.SMS_API_KEY : atob("ZTFhNzRjNmNiYzdjOWFiMw==");
 export const PERMANENT_SMS_SECRET_KEY = typeof process !== "undefined" && process.env?.SMS_SECRET_KEY ? process.env.SMS_SECRET_KEY : atob("NDUxYjdjOTE=");
-export const PERMANENT_SMS_SENDER_ID = typeof process !== "undefined" && process.env?.SMS_SENDER_ID ? process.env.SMS_SENDER_ID : "8809617633276";
+export const PERMANENT_SMS_SENDER_ID = typeof process !== "undefined" && process.env?.SMS_SENDER_ID ? process.env.SMS_SENDER_ID : "BINISTA";
 export const PERMANENT_SMS_BASE_URL = "http://sms.sasbulksms.com:3040/sendtext";
 
 export interface SmsSendResult {

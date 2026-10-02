@@ -1,6 +1,6 @@
 {
-  "appId": "com.dailyinternetoffer.bd",
-  "appName": "All MAYADIN FASHION",
+  "appId": "com.binista.app",
+  "appName": "BINISTA",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "android": {

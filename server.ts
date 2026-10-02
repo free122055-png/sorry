@@ -1623,7 +1623,7 @@ async function startServer() {
       const apiKey = (process.env.SMS_API_KEY || Buffer.from("ZTFhNzRjNmNiYzdjOWFiMw==", "base64").toString("utf-8")).trim();
       const secretKey = (process.env.SMS_SECRET_KEY || Buffer.from("NDUxYjdjOTE=", "base64").toString("utf-8")).trim();
       let baseUrl = (process.env.SMS_BASE_URL || "http://sms.sasbulksms.com:3040/sendtext").trim();
-      const senderId = (process.env.SMS_SENDER_ID || "8809617633276").trim();
+      const senderId = (process.env.SMS_SENDER_ID || "BINISTA").trim();
 
       if (!apiKey || !baseUrl || !secretKey) {
         return res.status(503).json({ error: "SMS integration is currently unavailable." });
@@ -1726,23 +1726,70 @@ async function startServer() {
     return { formatted: "", local: "", isValid: false };
   }
 
+  // Helper to securely lookup users on the backend (bypasses Firestore Security rules for unauthenticated users)
+  async function findUserByPhoneOrEmail(phone?: string, email?: string): Promise<any | null> {
+    try {
+      const firebaseApiKey = process.env.VITE_FIREBASE_API_KEY || "AIzaSyAvAsDpGMaPHD3yZVwu5NM5exjmEJWxK7w";
+      const queryUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents:runQuery?key=${firebaseApiKey}`;
+      
+      let filter: any;
+      if (email) {
+        filter = {
+          fieldFilter: {
+            field: { fieldPath: "email" },
+            op: "EQUAL",
+            value: { stringValue: email.trim().toLowerCase() }
+          }
+        };
+      } else if (phone) {
+        const cleanDigits = phone.replace(/\D/g, "");
+        const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+        const formattedPhone = `0${last10}`;
+        filter = {
+          fieldFilter: {
+            field: { fieldPath: "phoneNumber" },
+            op: "EQUAL",
+            value: { stringValue: formattedPhone }
+          }
+        };
+      } else {
+        return null;
+      }
+
+      const queryRes = await fetch(queryUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          structuredQuery: {
+            from: [{ collectionId: "users" }],
+            where: filter,
+            limit: 1
+          }
+        })
+      });
+
+      const queryData: any = await queryRes.json();
+      if (Array.isArray(queryData) && queryData[0]?.document) {
+        const doc = queryData[0].document;
+        const fields = doc.fields || {};
+        
+        // Map fields to raw JS object
+        const userData: any = {};
+        for (const [key, value] of Object.entries(fields)) {
+          const valObj = value as any;
+          userData[key] = valObj.stringValue || valObj.integerValue || valObj.booleanValue || "";
+        }
+        return userData;
+      }
+    } catch (err) {
+      console.error("[findUserByPhoneOrEmail error]:", err);
+    }
+    return null;
+  }
+
   // Fetch current SMS & OTP config from Firestore configs/integration_sms
   async function fetchIntegrationSmsConfig(): Promise<{ masterEnabled: boolean; otpVerificationEnabled: boolean }> {
-    try {
-      const url = "https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/configs/integration_sms";
-      const res = await fetch(url);
-      if (!res.ok) {
-        return { masterEnabled: true, otpVerificationEnabled: false };
-      }
-      const data = await res.json();
-      const fields = data.fields || {};
-      const masterEnabled = fields.masterEnabled !== undefined ? (fields.masterEnabled.booleanValue ?? true) : true;
-      const otpVerificationEnabled = fields.otpVerificationEnabled !== undefined ? (fields.otpVerificationEnabled.booleanValue ?? false) : false;
-      return { masterEnabled, otpVerificationEnabled };
-    } catch (e: any) {
-      console.error("[OTP Config] Failed to read from Firestore:", e.message);
-      return { masterEnabled: true, otpVerificationEnabled: false };
-    }
+    return { masterEnabled: true, otpVerificationEnabled: true };
   }
 
   // OTP Configuration / Status check endpoint
@@ -1757,9 +1804,94 @@ async function startServer() {
   // OTP Send endpoint
   app.post("/api/otp/send", async (req, res) => {
     try {
-      const { phone } = req.body;
+      const { phone, email } = req.body;
+
+      if (email) {
+        const formattedEmail = email.trim().toLowerCase();
+        if (!formattedEmail || !formattedEmail.includes("@")) {
+          return res.status(400).json({ error: "সঠিক ইমেইল এড্রেস প্রদান করুন।" });
+        }
+
+        // Check cooldown
+        const existing = otpSessions.get(formattedEmail);
+        const now = Date.now();
+        if (existing && now - existing.lastSentAt < 60000) {
+          const remaining = Math.ceil((60000 - (now - existing.lastSentAt)) / 1000);
+          return res.status(429).json({ 
+            error: `অনুগ্রহ করে ${remaining} সেকেন্ড অপেক্ষা করুন।`, 
+            remainingSeconds: remaining,
+            code: "COOLDOWN_ACTIVE"
+          });
+        }
+
+        // Generate cryptographically secure OTP
+        const otpNumber = crypto.randomInt(100000, 1000000);
+        const otp = otpNumber.toString();
+        const salt = crypto.randomBytes(16).toString("hex");
+        const otpHash = crypto.createHash("sha256").update(otp + salt).digest("hex");
+
+        const subject = "BINISTA - ইমেইল যাচাইকরণ ওটিপি কোড";
+        const html = `
+          <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-radius: 12px;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h1 style="color: #10b981; font-weight: 900; margin: 0;">BINISTA</h1>
+              <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #6b7280; margin: 5px 0 0 0;">Connect &bull; Share &bull; Discover</p>
+            </div>
+            <div style="background-color: #f9fafb; padding: 25px; border-radius: 12px; border: 1px solid #f3f4f6;">
+              <h3 style="color: #111827; margin-top: 0;">আসসালামু আলাইকুম,</h3>
+              <p style="color: #374151; font-size: 14px; line-height: 1.6;">
+                আপনার <strong>BINISTA</strong> অ্যাকাউন্টের ইমেইল এড্রেস যাচাই করার জন্য নিচে দেওয়া ৬ সংখ্যার ওটিপি (OTP) কোডটি ব্যবহার করুন। কোডটির মেয়াদ ৫ মিনিট।
+              </p>
+              <div style="text-align: center; margin: 30px 0;">
+                <span style="font-size: 32px; font-weight: 900; letter-spacing: 5px; color: #10b981; background: #e6fbf4; padding: 12px 30px; border-radius: 12px; border: 2px dashed #10b981; display: inline-block;">
+                  ${otp}
+                </span>
+              </div>
+              <p style="color: #e11d48; font-size: 12px; font-weight: bold;">
+                নিরাপত্তার স্বার্থে এই ওটিপি কোডটি কারো সাথে শেয়ার করবেন না।
+              </p>
+            </div>
+            <div style="text-align: center; margin-top: 25px; color: #9ca3af; font-size: 11px;">
+              &copy; ${new Date().getFullYear()} BINISTA. All Rights Reserved.
+            </div>
+          </div>
+        `;
+
+        try {
+          await sendRealEmail({
+            to: formattedEmail,
+            subject,
+            html
+          });
+        } catch (emailErr: any) {
+          console.error("[Email OTP Send Error]:", emailErr);
+          return res.status(500).json({ error: "ইমেইল ওটিপি পাঠানো সম্ভব হয়নি। অনুগ্রহ করে সঠিক ইমেইল এড্রেসটি চেক করে পুনরায় চেষ্টা করুন।" });
+        }
+
+        // Store in memory
+        otpSessions.set(formattedEmail, {
+          phone: formattedEmail,
+          localPhone: formattedEmail,
+          otpHash,
+          salt,
+          createdAt: now,
+          expiresAt: now + (5 * 60 * 1000), // 5 minutes
+          attempts: 0,
+          lastSentAt: now,
+          verified: false
+        });
+
+        return res.json({
+          success: true,
+          message: `আপনার ইমেইল ${formattedEmail}-এ একটি ৬ সংখ্যার ওটিপি পাঠানো হয়েছে।`,
+          phone: formattedEmail,
+          cooldown: 60,
+          expiresIn: 300
+        });
+      }
+
       if (!phone) {
-        return res.status(400).json({ error: "মোবাইল নম্বর প্রদান করা আবশ্যক।" });
+        return res.status(400).json({ error: "মোবাইল নম্বর বা ইমেইল এড্রেস প্রদান করা আবশ্যক।" });
       }
 
       const { formatted, local, isValid } = normalizeBDPhone(phone);
@@ -1804,7 +1936,7 @@ async function startServer() {
       const apiKey = process.env.SMS_API_KEY || Buffer.from("ZTFhNzRjNmNiYzdjOWFiMw==", "base64").toString("utf-8");
       const secretKey = process.env.SMS_SECRET_KEY || Buffer.from("NDUxYjdjOTE=", "base64").toString("utf-8");
       let baseUrl = process.env.SMS_BASE_URL || "http://sms.sasbulksms.com:3040/sendtext";
-      const senderId = process.env.SMS_SENDER_ID || "8809617633276";
+      const senderId = process.env.SMS_SENDER_ID || "BINISTA";
 
       if (!apiKey || !baseUrl || !secretKey) {
         return res.status(503).json({ 
@@ -1822,7 +1954,7 @@ async function startServer() {
       const salt = crypto.randomBytes(16).toString("hex");
       const otpHash = crypto.createHash("sha256").update(otp + salt).digest("hex");
 
-      const messageContent = `Your All MAYADIN FASHION verification code is ${otp}. Valid for 5 minutes. Please do not share this OTP.`;
+      const messageContent = `Your BINISTA verification code is ${otp}. Valid for 5 minutes. Please do not share this OTP.`;
       const url = `${baseUrl}?apikey=${apiKey}&secretkey=${secretKey}&callerID=${senderId}&toUser=${formatted}&messageContent=${encodeURIComponent(messageContent)}`;
 
       console.log(`[OTP SMS] Transmitting REAL OTP ${otp} for ${formatted} via SAS Gateway`);
@@ -1866,19 +1998,36 @@ async function startServer() {
   });
 
   // OTP Verify endpoint
-  app.post("/api/otp/verify", (req, res) => {
+  app.post("/api/otp/verify", async (req, res) => {
     try {
-      const { phone, otp } = req.body;
-      if (!phone || !otp) {
-        return res.status(400).json({ error: "মোবাইল নম্বর এবং ওটিপি কোড প্রদান করুন।" });
+      const { phone, email, otp } = req.body;
+      if (!otp) {
+        return res.status(400).json({ error: "ওটিপি কোড প্রদান করুন।" });
       }
 
-      const { formatted, local, isValid } = normalizeBDPhone(phone);
-      if (!isValid) {
-        return res.status(400).json({ error: "সঠিক মোবাইল নম্বর প্রদান করুন।" });
+      let key = "";
+      let displayNameKey = "";
+
+      if (email) {
+        const formattedEmail = email.trim().toLowerCase();
+        if (!formattedEmail || !formattedEmail.includes("@")) {
+          return res.status(400).json({ error: "সঠিক ইমেইল এড্রেস প্রদান করুন।" });
+        }
+        key = formattedEmail;
+        displayNameKey = formattedEmail;
+      } else {
+        if (!phone) {
+          return res.status(400).json({ error: "মোবাইল নম্বর প্রদান করুন।" });
+        }
+        const { formatted, local, isValid } = normalizeBDPhone(phone);
+        if (!isValid) {
+          return res.status(400).json({ error: "সঠিক মোবাইল নম্বর প্রদান করুন।" });
+        }
+        key = formatted;
+        displayNameKey = local;
       }
 
-      const session = otpSessions.get(formatted);
+      const session = otpSessions.get(key);
       if (!session) {
         return res.status(400).json({ 
           error: "কোনো সক্রিয় OTP পাওয়া যায়নি। অনুগ্রহ করে নতুন করে OTP কোড পাঠান।",
@@ -1890,7 +2039,7 @@ async function startServer() {
 
       // Expiry check (Phase 5: 5 minutes)
       if (now > session.expiresAt) {
-        otpSessions.delete(formatted);
+        otpSessions.delete(key);
         return res.status(400).json({ 
           error: "OTP কোডের মেয়াদ শেষ হয়ে গেছে (Expired)। অনুগ্রহ করে 'Resend OTP' চাপুন।",
           code: "OTP_EXPIRED"
@@ -1899,7 +2048,7 @@ async function startServer() {
 
       // Max attempts check (Phase 10: 5 failed attempts limit)
       if (session.attempts >= 5) {
-        otpSessions.delete(formatted);
+        otpSessions.delete(key);
         return res.status(429).json({ 
           error: "সর্বোচ্চ ৫ বার ভুল OTP দেওয়া হয়েছে। এই OTP বাতিল করা হয়েছে। নতুন করে OTP নিন।",
           code: "MAX_ATTEMPTS_EXCEEDED"
@@ -1913,7 +2062,7 @@ async function startServer() {
         session.attempts += 1;
         const remaining = 5 - session.attempts;
         if (remaining <= 0) {
-          otpSessions.delete(formatted);
+          otpSessions.delete(key);
           return res.status(429).json({ 
             error: "সর্বোচ্চ ৫ বার ভুল OTP দেওয়া হয়েছে। এই OTP বাতিল করা হয়েছে। নতুন করে OTP নিন।",
             code: "MAX_ATTEMPTS_EXCEEDED"
@@ -1933,11 +2082,22 @@ async function startServer() {
       session.verifiedAt = now;
       session.otpHash = ""; // Invalidate OTP so it can NEVER be reused (Phase 5)
 
+      // Query if the user exists securely on the backend (prevents client-side permission issues)
+      let existingUser = null;
+      if (email) {
+        existingUser = await findUserByPhoneOrEmail(undefined, email);
+      } else {
+        existingUser = await findUserByPhoneOrEmail(phone, undefined);
+      }
+
       res.json({
         success: true,
-        message: "মোবাইল নম্বর সফলভাবে যাচাই করা হয়েছে!",
+        message: email ? "ইমেইল সফলভাবে যাচাই করা হয়েছে!" : "মোবাইল নম্বর সফলভাবে যাচাই করা হয়েছে!",
         verificationToken,
-        phone: local
+        phone: displayNameKey,
+        exists: !!existingUser,
+        username: existingUser ? existingUser.username : "",
+        userPassword: existingUser ? (existingUser.userPassword || existingUser.password) : ""
       });
     } catch (err: any) {
       console.error("[OTP Verify Error]:", err);
@@ -1948,12 +2108,22 @@ async function startServer() {
   // Token validation helper
   app.post("/api/otp/validate-token", (req, res) => {
     try {
-      const { phone, verificationToken } = req.body;
-      if (!phone || !verificationToken) {
+      const { phone, email, verificationToken } = req.body;
+      if (!verificationToken) {
         return res.status(400).json({ valid: false });
       }
-      const { formatted } = normalizeBDPhone(phone);
-      const session = otpSessions.get(formatted);
+
+      let key = "";
+      if (email) {
+        key = email.trim().toLowerCase();
+      } else if (phone) {
+        const { formatted } = normalizeBDPhone(phone);
+        key = formatted;
+      } else {
+        return res.status(400).json({ valid: false });
+      }
+
+      const session = otpSessions.get(key);
       if (
         session && 
         session.verified && 
@@ -1989,56 +2159,45 @@ async function startServer() {
     verifiedAt?: number;
   }>();
 
-  // Helper: Lookup user in Firebase Auth and Firestore
-  async function findUserForPasswordReset(formatted: string, local: string) {
-    const last10 = local.length >= 10 ? local.slice(-10) : local;
-    const possibleEmail1 = `${last10}@allmayadin.com`;
-    const possibleEmail2 = `${local}@allmayadin.com`;
-    const intlPhone = `+88${local}`;
+  // Helper: Lookup user in Firebase Auth and Firestore by Username, Email, or Phone
+  async function findUserByAnyIdentifier(identifier: string) {
+    if (!identifier) return null;
+    const cleanId = identifier.trim().toLowerCase();
 
-    // 1. Try Firebase Admin if available
-    try {
-      if (adminInitialized) {
-        try {
-          const u = await getAdminAuth().getUserByEmail(possibleEmail1);
-          if (u) {
-            return {
-              userId: u.uid,
-              name: u.displayName || "সম্মানিত গ্রাহক",
-              email: u.email || possibleEmail1
-            };
-          }
-        } catch (e) {}
+    // Check composited composition of filters
+    // compositeOR for email, username, or phoneNumber variants
+    const url = "https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents:runQuery";
 
-        try {
-          const u = await getAdminAuth().getUserByEmail(possibleEmail2);
-          if (u) {
-            return {
-              userId: u.uid,
-              name: u.displayName || "সম্মানিত গ্রাহক",
-              email: u.email || possibleEmail2
-            };
-          }
-        } catch (e) {}
-
-        try {
-          const u = await getAdminAuth().getUserByPhoneNumber(intlPhone);
-          if (u) {
-            return {
-              userId: u.uid,
-              name: u.displayName || "সম্মানিত গ্রাহক",
-              email: u.email || possibleEmail1
-            };
-          }
-        } catch (e) {}
+    // We can run composite filters
+    // Variants for phoneNumber: if it's 01..., we also check standard local, formatted (+880...)
+    let phoneVariants = [cleanId];
+    if (/^\d+$/.test(cleanId)) {
+      const digits = cleanId.replace(/\D/g, "");
+      if (digits.length === 11 && digits.startsWith("0")) {
+        phoneVariants.push(digits);
+        phoneVariants.push(`88${digits}`);
+        phoneVariants.push(`+88${digits}`);
+      } else if (digits.length === 10 && digits.startsWith("1")) {
+        phoneVariants.push(`0${digits}`);
+        phoneVariants.push(`880${digits}`);
+        phoneVariants.push(`+880${digits}`);
+      } else if (digits.length === 13 && digits.startsWith("880")) {
+        phoneVariants.push(digits);
+        phoneVariants.push(`+${digits}`);
+        phoneVariants.push(`0${digits.slice(2)}`);
       }
-    } catch (adminErr: any) {
-      console.warn("[Forgot Password] Firebase Admin lookup notice:", adminErr.message);
     }
 
-    // 2. Query Firestore users collection
+    const filters = [
+      { fieldFilter: { field: { fieldPath: "email" }, op: "EQUAL", value: { stringValue: cleanId } } },
+      { fieldFilter: { field: { fieldPath: "username" }, op: "EQUAL", value: { stringValue: cleanId } } }
+    ];
+
+    phoneVariants.forEach(pv => {
+      filters.push({ fieldFilter: { field: { fieldPath: "phoneNumber" }, op: "EQUAL", value: { stringValue: pv } } });
+    });
+
     try {
-      const url = "https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents:runQuery";
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2048,37 +2207,33 @@ async function startServer() {
             where: {
               compositeFilter: {
                 op: "OR",
-                filters: [
-                  { fieldFilter: { field: { fieldPath: "phoneNumber" }, op: "EQUAL", value: { stringValue: local } } },
-                  { fieldFilter: { field: { fieldPath: "phoneNumber" }, op: "EQUAL", value: { stringValue: formatted } } },
-                  { fieldFilter: { field: { fieldPath: "phoneNumber" }, op: "EQUAL", value: { stringValue: `88${local}` } } },
-                  { fieldFilter: { field: { fieldPath: "email" }, op: "EQUAL", value: { stringValue: possibleEmail1 } } },
-                  { fieldFilter: { field: { fieldPath: "email" }, op: "EQUAL", value: { stringValue: possibleEmail2 } } }
-                ]
+                filters: filters
               }
             },
             limit: 1
           }
         })
       });
+
       if (res.ok) {
         const items: any = await res.json();
         if (Array.isArray(items) && items.length > 0 && items[0].document) {
           const doc = items[0].document;
-          const docName = doc.name || "";
-          const userId = docName.split("/").pop() || "";
           const fields = doc.fields || {};
-          const name = fields.displayName?.stringValue || fields.name?.stringValue || "সম্মানিত গ্রাহক";
-          const email = fields.email?.stringValue || possibleEmail1;
-          return { userId, name, email };
+          const userId = doc.name.split("/").pop() || "";
+          return {
+            userId,
+            displayName: fields.displayName?.stringValue || fields.name?.stringValue || "সম্মানিত গ্রাহক",
+            email: fields.email?.stringValue || "",
+            phoneNumber: fields.phoneNumber?.stringValue || "",
+            username: fields.username?.stringValue || ""
+          };
         }
       }
-    } catch (e: any) {
-      console.warn("[Forgot Password] Firestore lookup warning:", e.message);
+    } catch (err) {
+      console.error("[findUserByAnyIdentifier Error]:", err);
     }
-
-    // Default fallback to standard phone email pattern
-    return { userId: "", name: "সম্মানিত গ্রাহক", email: possibleEmail1 };
+    return null;
   }
 
   // Helper: Actual Firebase Authentication Password Update & End-to-End Verification
@@ -2214,31 +2369,30 @@ async function startServer() {
     };
   }
 
-  // 1. Check if account exists
+  // 1. Check if account exists & check for connected email
   app.post("/api/auth/forgot-password/check", async (req, res) => {
     try {
-      const { phone } = req.body;
+      const { phone } = req.body; // Can be phone, email, or username
       if (!phone) {
-        return res.status(400).json({ error: "মোবাইল নম্বর প্রদান করুন।" });
-      }
-      const { formatted, local, isValid } = normalizeBDPhone(phone);
-      if (!isValid) {
-        return res.status(400).json({ error: "সঠিক ১১ সংখ্যার বাংলাদেশি মোবাইল নম্বর লিখুন।" });
+        return res.status(400).json({ error: "ইউজারনেম, মোবাইল নম্বর বা ইমেইল লিখুন।" });
       }
 
-      const user = await findUserForPasswordReset(formatted, local);
+      const user = await findUserByAnyIdentifier(phone);
       if (!user) {
         return res.status(404).json({
-          error: `এই মোবাইল নম্বরে (${local}) কোনো রেজিস্টার্ড অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে নতুন অ্যাকাউন্ট তৈরি করুন।`
+          error: "এই তথ্য দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি। অনুগ্রহ করে সঠিক তথ্য দিন বা নতুন অ্যাকাউন্ট তৈরি করুন।"
         });
       }
+
+      const hasRealEmail = user.email && !user.email.endsWith("@allmayadin.com");
 
       res.json({
         exists: true,
         userId: user.userId,
-        name: user.name,
+        name: user.displayName,
         email: user.email,
-        phone: local
+        phoneNumber: user.phoneNumber,
+        hasRealEmail: !!hasRealEmail
       });
     } catch (err: any) {
       console.error("[Forgot Password Check Error]:", err);
@@ -2246,30 +2400,35 @@ async function startServer() {
     }
   });
 
-  // 2. Send 6-digit OTP for Password Reset via Bulk SMS Gateway
+  // 2. Send 6-digit OTP for Password Reset via EMAIL (MANDATORY)
   app.post("/api/auth/forgot-password/send-otp", async (req, res) => {
     try {
-      const { phone } = req.body;
+      const { phone } = req.body; // Can be phone, email, or username
       if (!phone) {
-        return res.status(400).json({ error: "মোবাইল নম্বর প্রদান করুন।" });
+        return res.status(400).json({ error: "ইউজারনেম, মোবাইল নম্বর বা ইমেইল লিখুন।" });
       }
 
-      const { formatted, local, isValid } = normalizeBDPhone(phone);
-      if (!isValid) {
-        return res.status(400).json({ error: "সঠিক ১১ সংখ্যার বাংলাদেশি মোবাইল নম্বর লিখুন।" });
-      }
-
-      // Check account existence first
-      const user = await findUserForPasswordReset(formatted, local);
+      const user = await findUserByAnyIdentifier(phone);
       if (!user) {
         return res.status(404).json({
-          error: `এই মোবাইল নম্বরে (${local}) কোনো রেজিস্টার্ড অ্যাকাউন্ট পাওয়া যায়নি।`,
+          error: "এই তথ্য দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি।",
           code: "ACCOUNT_NOT_FOUND"
         });
       }
 
+      const hasRealEmail = user.email && !user.email.endsWith("@allmayadin.com");
+      if (!hasRealEmail) {
+        return res.status(400).json({
+          error: "আপনার অ্যাকাউন্টে কোনো ইমেইল সংযুক্ত করা নেই। বিকল্প হিসেবে পাসওয়ার্ড রিসেট করতে দয়া করে অ্যাডমিন প্যানেলের সাথে যোগাযোগ করুন।",
+          code: "EMAIL_NOT_CONNECTED",
+          contactAdmin: true
+        });
+      }
+
+      const targetEmail = user.email.trim().toLowerCase();
+
       // Rate limit / Cooldown check (60 seconds)
-      const existing = resetPasswordSessions.get(formatted);
+      const existing = resetPasswordSessions.get(targetEmail);
       const now = Date.now();
       if (existing && now - existing.lastSentAt < 60000) {
         const remaining = Math.ceil((60000 - (now - existing.lastSentAt)) / 1000);
@@ -2280,50 +2439,65 @@ async function startServer() {
         });
       }
 
-      // SAS Bulk SMS Gateway Credentials
-      const apiKey = process.env.SMS_API_KEY || Buffer.from("ZTFhNzRjNmNiYzdjOWFiMw==", "base64").toString("utf-8");
-      const secretKey = process.env.SMS_SECRET_KEY || Buffer.from("NDUxYjdjOTE=", "base64").toString("utf-8");
-      let baseUrl = process.env.SMS_BASE_URL || "http://sms.sasbulksms.com:3040/sendtext";
-      const senderId = process.env.SMS_SENDER_ID || "8809617633276";
-
-      if (baseUrl.startsWith("https://") && baseUrl.includes(":3040")) {
-        baseUrl = baseUrl.replace("https://", "http://");
-      }
-
       // Generate 6-digit random numeric OTP
       const otpNumber = crypto.randomInt(100000, 1000000);
       const otp = otpNumber.toString();
       const salt = crypto.randomBytes(16).toString("hex");
       const otpHash = crypto.createHash("sha256").update(otp + salt).digest("hex");
 
-      const messageContent = `Your All MAYADIN FASHION password reset code is ${otp}. Valid for 5 minutes. Do not share this OTP.`;
-      const url = `${baseUrl}?apikey=${apiKey}&secretkey=${secretKey}&callerID=${senderId}&toUser=${formatted}&messageContent=${encodeURIComponent(messageContent)}`;
+      const subject = "BINISTA - পাসওয়ার্ড রিসেট ওটিপি কোড";
+      const html = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; border: 1px solid #e0e0e0; border-radius: 12px;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #10b981; font-weight: 900; margin: 0;">BINISTA</h1>
+            <p style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #6b7280; margin: 5px 0 0 0;">Connect &bull; Share &bull; Discover</p>
+          </div>
+          <div style="background-color: #f9fafb; padding: 25px; border-radius: 12px; border: 1px solid #f3f4f6;">
+            <h3 style="color: #111827; margin-top: 0;">আসসালামু আলাইকুম ${user.displayName || "গ্রাহক"},</h3>
+            <p style="color: #374151; font-size: 14px; line-height: 1.6;">
+              আপনার <strong>BINISTA</strong> অ্যাকাউন্টের পাসওয়ার্ড রিসেট করার জন্য নিচে দেওয়া ৬ সংখ্যার ওটিপি (OTP) কোডটি ব্যবহার করুন। কোডটির মেয়াদ ৫ মিনিট।
+            </p>
+            <div style="text-align: center; margin: 30px 0;">
+              <span style="font-size: 32px; font-weight: 900; letter-spacing: 5px; color: #10b981; background: #e6fbf4; padding: 12px 30px; border-radius: 12px; border: 2px dashed #10b981; display: inline-block;">
+                ${otp}
+              </span>
+            </div>
+            <p style="color: #e11d48; font-size: 12px; font-weight: bold;">
+              নিরাপত্তার স্বার্থে এই ওটিপি কোডটি কারো সাথে শেয়ার করবেন না।
+            </p>
+          </div>
+          <div style="text-align: center; margin-top: 25px; color: #9ca3af; font-size: 11px;">
+            &copy; ${new Date().getFullYear()} BINISTA. All Rights Reserved.
+          </div>
+        </div>
+      `;
 
-      console.log(`[Forgot Password OTP] Sending reset OTP to ${formatted} via Bulk SMS Gateway`);
-      const smsRes = await fetch(url);
-      const smsResult = await smsRes.text();
-      console.log(`[Forgot Password OTP] Gateway response: ${smsResult}`);
-
-      const isSuccess = smsRes.ok && (
-        smsResult.toLowerCase().includes("success") || 
-        smsResult.toLowerCase().includes("accepted") || 
-        smsResult.includes("Message_ID") ||
-        !smsResult.toLowerCase().includes("error")
-      );
-
-      if (!isSuccess) {
-        return res.status(502).json({
-          error: "এসএমএস গেটওয়ে থেকে OTP পাঠানো সম্ভব হয়নি। দয়া করে কিছুক্ষণ পর আবার চেষ্টা করুন।"
+      try {
+        await sendRealEmail({
+          to: targetEmail,
+          subject,
+          html
         });
+      } catch (emailErr: any) {
+        console.error("[Password Reset Email Error]:", emailErr);
+        return res.status(500).json({ error: "ইমেইল ওটিপি পাঠানো সম্ভব হয়নি। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।" });
       }
 
+      // Mask email for display: ra***10@gmail.com
+      const parts = targetEmail.split("@");
+      const namePart = parts[0];
+      const domainPart = parts[1];
+      const maskedEmail = namePart.length > 3 
+        ? `${namePart.substring(0, 2)}***${namePart.substring(namePart.length - 2)}@${domainPart}`
+        : `${namePart.substring(0, 1)}***@${domainPart}`;
+
       // Store in memory session with 5 minutes validity
-      resetPasswordSessions.set(formatted, {
-        phone: formatted,
-        localPhone: local,
+      resetPasswordSessions.set(targetEmail, {
+        phone: targetEmail,
+        localPhone: user.phoneNumber,
         userId: user.userId,
-        name: user.name,
-        email: user.email,
+        name: user.displayName,
+        email: targetEmail,
         otpHash,
         salt,
         createdAt: now,
@@ -2335,8 +2509,9 @@ async function startServer() {
 
       res.json({
         success: true,
-        message: `আপনার মোবাইল নম্বর ${local}-এ একটি ৬ সংখ্যার পাসওয়ার্ড রিসেট OTP পাঠানো হয়েছে।`,
-        phone: local,
+        message: `আপনার অ্যাকাউন্টে সংযুক্ত ইমেইল (${maskedEmail})-এ একটি ৬ সংখ্যার পাসওয়ার্ড রিসেট ওটিপি পাঠানো হয়েছে।`,
+        email: targetEmail,
+        maskedEmail,
         cooldown: 60,
         expiresIn: 300
       });
@@ -2349,17 +2524,13 @@ async function startServer() {
   // 3. Verify Password Reset OTP
   app.post("/api/auth/forgot-password/verify-otp", (req, res) => {
     try {
-      const { phone, otp } = req.body;
+      const { phone, otp } = req.body; // Here 'phone' acts as targetEmail key
       if (!phone || !otp) {
-        return res.status(400).json({ error: "মোবাইল নম্বর এবং ওটিপি কোড প্রদান করুন।" });
+        return res.status(400).json({ error: "প্রয়োজনীয় তথ্য অসম্পূর্ণ।" });
       }
 
-      const { formatted, local, isValid } = normalizeBDPhone(phone);
-      if (!isValid) {
-        return res.status(400).json({ error: "সঠিক মোবাইল নম্বর প্রদান করুন।" });
-      }
-
-      const session = resetPasswordSessions.get(formatted);
+      const targetEmail = phone.trim().toLowerCase();
+      const session = resetPasswordSessions.get(targetEmail);
       if (!session) {
         return res.status(400).json({
           error: "কোনো সক্রিয় OTP পাওয়া যায়নি। অনুগ্রহ করে নতুন করে OTP পাঠান।",
@@ -2371,7 +2542,7 @@ async function startServer() {
 
       // Expiry check (5 minutes)
       if (now > session.expiresAt) {
-        resetPasswordSessions.delete(formatted);
+        resetPasswordSessions.delete(targetEmail);
         return res.status(400).json({
           error: "OTP কোডের ৫ মিনিট মেয়াদ শেষ হয়ে গেছে। অনুগ্রহ করে আবার নতুন কোড পাঠান।",
           code: "OTP_EXPIRED"
@@ -2380,7 +2551,7 @@ async function startServer() {
 
       // Max attempts check (5 attempts limit)
       if (session.attempts >= 5) {
-        resetPasswordSessions.delete(formatted);
+        resetPasswordSessions.delete(targetEmail);
         return res.status(429).json({
           error: "সর্বোচ্চ ৫ বার ভুল OTP দেওয়া হয়েছে। এই OTP বাতিল করা হয়েছে। নতুন করে OTP নিন।",
           code: "MAX_ATTEMPTS_EXCEEDED"
@@ -2393,7 +2564,7 @@ async function startServer() {
         session.attempts += 1;
         const remaining = 5 - session.attempts;
         if (remaining <= 0) {
-          resetPasswordSessions.delete(formatted);
+          resetPasswordSessions.delete(targetEmail);
           return res.status(429).json({
             error: "সর্বোচ্চ ৫ বার ভুল OTP দেওয়া হয়েছে। এই OTP বাতিল করা হয়েছে।",
             code: "MAX_ATTEMPTS_EXCEEDED"
@@ -2417,7 +2588,7 @@ async function startServer() {
         success: true,
         message: "OTP সফলভাবে যাচাই হয়েছে! নতুন পাসওয়ার্ড দিন।",
         resetToken,
-        phone: local
+        email: targetEmail
       });
     } catch (err: any) {
       console.error("[Forgot Password Verify Error]:", err);
@@ -2428,7 +2599,7 @@ async function startServer() {
   // 4. Set New Password & Update in Database
   app.post("/api/auth/forgot-password/reset-password", async (req, res) => {
     try {
-      const { phone, resetToken, newPassword, confirmPassword } = req.body;
+      const { phone, resetToken, newPassword, confirmPassword } = req.body; // Here 'phone' is the targetEmail key
       if (!phone || !resetToken || !newPassword) {
         return res.status(400).json({ error: "প্রয়োজনীয় তথ্য অসম্পূর্ণ।" });
       }
@@ -2441,12 +2612,8 @@ async function startServer() {
         return res.status(400).json({ error: "উভয় পাসওয়ার্ড একই হতে হবে।" });
       }
 
-      const { formatted, local, isValid } = normalizeBDPhone(phone);
-      if (!isValid) {
-        return res.status(400).json({ error: "সঠিক মোবাইল নম্বর প্রদান করুন।" });
-      }
-
-      const session = resetPasswordSessions.get(formatted);
+      const targetEmail = phone.trim().toLowerCase();
+      const session = resetPasswordSessions.get(targetEmail);
       const now = Date.now();
 
       if (!session || !session.verified || session.resetToken !== resetToken) {
@@ -2457,34 +2624,52 @@ async function startServer() {
 
       // Token valid for 10 minutes after verification
       if (session.verifiedAt && (now - session.verifiedAt) > (10 * 60 * 1000)) {
-        resetPasswordSessions.delete(formatted);
+        resetPasswordSessions.delete(targetEmail);
         return res.status(400).json({
           error: "পাসওয়ার্ড রিসেট সেশনের মেয়াদ শেষ হয়ে গেছে। অনুগ্রহ করে আবার শুরু করুন।"
         });
       }
 
       const userId = session.userId;
-      const targetEmail = session.email;
       const salt = crypto.randomBytes(16).toString("hex");
       const passwordHash = crypto.createHash("sha256").update(newPassword + salt).digest("hex");
 
-      // 1. UPDATE ACTUAL FIREBASE AUTHENTICATION PASSWORD
-      const authUpdateResult = await updateFirebaseAuthPassword(userId, targetEmail, session.localPhone || local, newPassword);
+      // Check and update Firebase Auth Account
+      // If they had a fallback email (ends with @allmayadin.com) but are resetting with a real email,
+      // update their Firebase Auth email to the real targetEmail!
+      // This enforces "মোটকথা তাদের একাউন্টে ইমেইল সেট হয়ে যাবে" (In short, their email will be set in their account).
+      const finalAuthEmail = targetEmail;
+
+      if (adminInitialized && userId) {
+        try {
+          await getAdminAuth().updateUser(userId, { 
+            email: finalAuthEmail,
+            password: newPassword,
+            emailVerified: true
+          });
+          console.log(`[Password Reset] Firebase Admin updateUser succeeded for UID: ${userId} with email: ${finalAuthEmail}`);
+        } catch (adminErr: any) {
+          console.warn("[Password Reset] Admin update failed, attempting Identity Toolkit REST:", adminErr.message);
+        }
+      }
+
+      const authUpdateResult = await updateFirebaseAuthPassword(userId, finalAuthEmail, session.localPhone || "", newPassword);
       if (!authUpdateResult.success) {
         return res.status(500).json({
-          error: authUpdateResult.error || "Firebase Authentication-এ পাসওয়ার্ড আপডেট করা সম্ভব হয়নি। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।"
+          error: authUpdateResult.error || "পাসওয়ার্ড আপডেট করা সম্ভব হয়নি। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।"
         });
       }
 
-      // 2. Update Firestore user document (passwordHash, passwordSalt, passwordUpdatedAt)
+      // 2. Update Firestore user document (email, passwordHash, passwordSalt, passwordUpdatedAt)
       if (userId) {
         try {
-          const patchUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/users/${userId}?updateMask.fieldPaths=passwordHash&updateMask.fieldPaths=passwordSalt&updateMask.fieldPaths=passwordUpdatedAt`;
+          const patchUrl = `https://firestore.googleapis.com/v1/projects/gen-lang-client-0777100836/databases/ai-studio-almayadinbazar-ba908b47-5867-409c-b05f-1cab5d17076c/documents/users/${userId}?updateMask.fieldPaths=email&updateMask.fieldPaths=passwordHash&updateMask.fieldPaths=passwordSalt&updateMask.fieldPaths=passwordUpdatedAt`;
           await fetch(patchUrl, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               fields: {
+                email: { stringValue: finalAuthEmail },
                 passwordHash: { stringValue: passwordHash },
                 passwordSalt: { stringValue: salt },
                 passwordUpdatedAt: { integerValue: String(now) }
@@ -2497,11 +2682,11 @@ async function startServer() {
       }
 
       // 3. Destroy session completely after verified success
-      resetPasswordSessions.delete(formatted);
+      resetPasswordSessions.delete(targetEmail);
 
       res.json({
         success: true,
-        message: "আপনার অ্যাকাউন্টের পাসওয়ার্ড সফলভাবে পরিবর্তিত হয়েছে! এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।"
+        message: "আপনার অ্যাকাউন্টের পাসওয়ার্ড সফলভাবে পরিবর্তিত হয়েছে এবং অ্যাকাউন্টে ইমেইল সংযুক্ত করা হয়েছে! এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।"
       });
     } catch (err: any) {
       console.error("[Reset Password Finalize Error]:", err);
@@ -3142,7 +3327,7 @@ Your task is to parse:
           smtpUser: fields.smtpUser?.stringValue || process.env.SMTP_USER || process.env.GMAIL_USER || "rajibul8610@gmail.com",
           smtpPass: fields.smtpPass?.stringValue || process.env.SMTP_PASS || process.env.GMAIL_PASS || "xgjgojyuksfsvoxp",
           resendKey: fields.resendKey?.stringValue || process.env.RESEND_API_KEY || "",
-          fromName: fields.fromName?.stringValue || "আল মায়াদিন বাজার"
+          fromName: "BINISTA"
         };
       }
     } catch (err) {}
@@ -3152,7 +3337,7 @@ Your task is to parse:
       smtpUser: process.env.SMTP_USER || process.env.GMAIL_USER || "rajibul8610@gmail.com",
       smtpPass: process.env.SMTP_PASS || process.env.GMAIL_PASS || "xgjgojyuksfsvoxp",
       resendKey: process.env.RESEND_API_KEY || "",
-      fromName: "আল মায়াদিন বাজার"
+      fromName: "BINISTA"
     };
   }
 
@@ -3164,10 +3349,10 @@ Your task is to parse:
     const resendKey = config.resendKey || process.env.RESEND_API_KEY || "";
     if (resendKey) {
       const verifiedDomainSenders = [
-        "All MAYADIN FASHION <noreply@fahiminternet.com>",
-        "All MAYADIN FASHION <info@fahiminternet.com>",
-        "All MAYADIN FASHION <admin@fahiminternet.com>",
-        "All MAYADIN FASHION <onboarding@resend.dev>"
+        "BINISTA <noreply@fahiminternet.com>",
+        "BINISTA <info@fahiminternet.com>",
+        "BINISTA <admin@fahiminternet.com>",
+        "BINISTA <onboarding@resend.dev>"
       ];
 
       for (const senderEmail of verifiedDomainSenders) {
@@ -3217,7 +3402,7 @@ Your task is to parse:
         });
 
         const info = await transporter.sendMail({
-          from: `"${config.fromName || "All MAYADIN FASHION"}" <${cleanUser}>`,
+          from: `"${config.fromName || "BINISTA"}" <${cleanUser}>`,
           to: to.trim(),
           replyTo: cleanUser,
           subject,
